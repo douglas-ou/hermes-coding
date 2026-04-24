@@ -1,0 +1,71 @@
+{
+  "name": "hermes-coding",
+  "version": "0.1.1",
+  "description": "CLI tool for hermes-coding - efficient operations for AI agents",
+  "main": "dist/index.js",
+  "bin": {
+    "hermes-coding": "bin/hermes-coding.js"
+  },
+  "files": [
+    "dist",
+    "bin",
+    "scripts",
+    "plugin-assets",
+    "README.md"
+  ],
+  "scripts": {
+    "prebuild": "bash scripts/bundle-assets.sh",
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "start": "node dist/index.js",
+    "test": "vitest",
+    "test:watch": "vitest --watch",
+    "lint": "eslint src --ext .ts",
+    "format": "prettier --write 'src/**/*.ts'",
+    "prepublishOnly": "npm run build"
+  },
+  "keywords": [
+    "hermes-coding",
+    "cli",
+    "ai-agent",
+    "task-management",
+    "multi-language",
+    "claude-code",
+    "automation",
+    "development-tools"
+  ],
+  "author": "Douglas",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/douglas-ou/hermes-coding.git",
+    "directory": "cli"
+  },
+  "homepage": "https://github.com/douglas-ou/hermes-coding#readme",
+  "bugs": {
+    "url": "https://github.com/douglas-ou/hermes-coding/issues"
+  },
+  "dependencies": {
+    "chalk": "^5.3.0",
+    "commander": "^11.1.0",
+    "fs-extra": "^11.2.0",
+    "update-notifier": "^7.3.1",
+    "yaml": "^2.3.4",
+    "zod": "^3.22.4"
+  },
+  "devDependencies": {
+    "@types/fs-extra": "^11.0.4",
+    "@types/node": "^20.10.6",
+    "@types/update-notifier": "^6.0.8",
+    "@typescript-eslint/eslint-plugin": "^6.17.0",
+    "@typescript-eslint/parser": "^6.17.0",
+    "@vitest/coverage-v8": "^1.6.1",
+    "eslint": "^8.56.0",
+    "prettier": "^3.1.1",
+    "typescript": "^5.3.3",
+    "vitest": "^1.1.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}

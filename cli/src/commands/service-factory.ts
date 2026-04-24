@@ -1,0 +1,145 @@
+/**
+ * Service Factory - Dependency Injection Container
+ *
+ * Creates and wires up services with their dependencies.
+ * Provides a central place for dependency management.
+ */
+
+import * as path from 'path';
+import { TaskService, ITaskService } from '../services/task-service';
+import { StateService, IStateService } from '../services/state-service';
+import { StatusService, IStatusService } from '../services/status-service';
+import { DetectionService, IDetectionService } from '../services/detection-service';
+import { ContextService, IContextService } from '../services/context-service';
+import { PromptService, IPromptService } from '../services/prompt-service';
+import { HookService } from '../services/hook-service';
+import { FileSystemTaskRepository } from '../repositories/task-repository.service';
+import { FileSystemStateRepository } from '../repositories/state-repository.service';
+import { LanguageDetector } from '../language/detector';
+import { FileSystemIndexRepository } from '../repositories/index-repository.service';
+import { FileSystemService } from '../infrastructure/file-system.service';
+import { ConsoleLogger } from '../infrastructure/logger.service';
+import { ILogger } from '../infrastructure/logger';
+
+/**
+ * Service container holding all initialized services
+ */
+export interface ServiceContainer {
+  taskService: ITaskService;
+  stateService: IStateService;
+  statusService: IStatusService;
+  detectionService: IDetectionService;
+  logger: ILogger;
+}
+
+/**
+ * Create and wire up all services for a workspace
+ */
+export function createServices(workspaceDir: string): ServiceContainer {
+  // Create shared infrastructure
+  const logger = new ConsoleLogger();
+  const fileSystem = new FileSystemService();
+
+  // Create repositories
+  const tasksDir = path.join(workspaceDir, '.hermes-coding', 'tasks');
+  const taskRepository = new FileSystemTaskRepository(fileSystem, tasksDir);
+  const stateRepository = new FileSystemStateRepository(fileSystem, workspaceDir);
+
+  // Create services with dependency injection
+  const taskService = new TaskService(taskRepository, stateRepository, logger, fileSystem, workspaceDir);
+  const stateService = new StateService(stateRepository, logger, fileSystem, workspaceDir);
+  const statusService = new StatusService(taskRepository, stateRepository, logger);
+
+  // Detection service
+  const indexRepository = new FileSystemIndexRepository(fileSystem, tasksDir);
+  const detectionService = new DetectionService(
+    LanguageDetector,
+    indexRepository,
+    logger,
+    workspaceDir
+  );
+
+  return {
+    taskService,
+    stateService,
+    statusService,
+    detectionService,
+    logger,
+  };
+}
+
+/**
+ * Create TaskService (convenience function for task commands)
+ */
+export function createTaskService(workspaceDir: string): ITaskService {
+  const logger = new ConsoleLogger();
+  const fileSystem = new FileSystemService();
+  const tasksDir = path.join(workspaceDir, '.hermes-coding', 'tasks');
+  const taskRepository = new FileSystemTaskRepository(fileSystem, tasksDir);
+  const stateRepository = new FileSystemStateRepository(fileSystem, workspaceDir);
+
+  return new TaskService(taskRepository, stateRepository, logger, fileSystem, workspaceDir);
+}
+
+/**
+ * Create StatusService (convenience function for status command)
+ */
+export function createStatusService(workspaceDir: string): IStatusService {
+  const logger = new ConsoleLogger();
+  const fileSystem = new FileSystemService();
+  const tasksDir = path.join(workspaceDir, '.hermes-coding', 'tasks');
+  const taskRepository = new FileSystemTaskRepository(fileSystem, tasksDir);
+  const stateRepository = new FileSystemStateRepository(fileSystem, workspaceDir);
+
+  return new StatusService(taskRepository, stateRepository, logger);
+}
+
+/**
+ * Create StateService (convenience function for state command)
+ */
+export function createStateService(workspaceDir: string): IStateService {
+  const logger = new ConsoleLogger();
+  const fileSystem = new FileSystemService();
+  const stateRepository = new FileSystemStateRepository(fileSystem, workspaceDir);
+
+  return new StateService(stateRepository, logger, fileSystem, workspaceDir);
+}
+
+/**
+ * Create DetectionService (convenience function for detect command)
+ */
+export function createDetectionService(workspaceDir: string): IDetectionService {
+  const logger = new ConsoleLogger();
+  const fileSystem = new FileSystemService();
+  const tasksDir = path.join(workspaceDir, '.hermes-coding', 'tasks');
+  const indexRepository = new FileSystemIndexRepository(fileSystem, tasksDir);
+
+  return new DetectionService(LanguageDetector, indexRepository, logger, workspaceDir);
+}
+
+/**
+ * Create ContextService (convenience function for task context gathering)
+ */
+export function createContextService(workspaceDir: string): IContextService {
+  const logger = new ConsoleLogger();
+  const fileSystem = new FileSystemService();
+  const tasksDir = path.join(workspaceDir, '.hermes-coding', 'tasks');
+  const taskRepository = new FileSystemTaskRepository(fileSystem, tasksDir);
+  const stateRepository = new FileSystemStateRepository(fileSystem, workspaceDir);
+
+  return new ContextService(taskRepository, stateRepository, fileSystem, logger, workspaceDir);
+}
+
+/**
+ * Create PromptService (pure prompt rendering service)
+ */
+export function createPromptService(): IPromptService {
+  return new PromptService();
+}
+
+/**
+ * Create HookService (pre-commit hook creation)
+ */
+export function createHookService(projectDir: string): HookService {
+  return new HookService(LanguageDetector, new ConsoleLogger());
+}

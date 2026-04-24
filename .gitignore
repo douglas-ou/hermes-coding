@@ -1,0 +1,55 @@
+# Dependencies
+node_modules/
+
+# Build outputs
+dist/
+build/
+*.tsbuildinfo
+*.js.map
+
+# Logs
+*.log
+logs/
+
+# Environment variables
+.env
+.env.*
+!.env.example
+
+# IDE
+.vscode/
+.idea/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Testing
+coverage/
+test-results/
+.vitest/
+
+# Temporary files
+tmp/
+temp/
+.cache/
+
+# Claude Code
+.claude/
+.claude-plugin/.local/
+cli/plugin-assets/
+
+# hermes-coding - Ignore runtime state, keep documentation
+.hermes-coding/state.json
+.hermes-coding/debug.log
+.hermes-coding/saga.log
+.hermes-coding/drafts/
+.hermes-coding/tasks/index.json
+.hermes-coding/backups/
+
+# Keep PRD and task definitions (valuable documentation)
+!.hermes-coding/prd.md
+!.hermes-coding/tasks/**/*.md
+
+# Keep directory structure in repo template
+!workspace/.gitkeep
