@@ -84,12 +84,15 @@ trap 'exit 143' TERM
 TOOL="claude"
 USER_MAX_ITERATIONS=""
 VISIBLE=0
+CUSTOM_TOOL=""
 
 while [[ $# -gt 0 ]]; do
   case $1 in
-    --tool)    TOOL="$2"; shift 2 ;;
-    --tool=*)  TOOL="${1#*=}"; shift ;;
-    --visible) VISIBLE=1; shift ;;
+    --tool)     TOOL="$2"; shift 2 ;;
+    --tool=*)   TOOL="${1#*=}"; shift ;;
+    --custom)   CUSTOM_TOOL="$2"; shift 2 ;;
+    --custom=*) CUSTOM_TOOL="${1#*=}"; shift ;;
+    --visible)  VISIBLE=1; shift ;;
     *)
       if [[ "$1" =~ ^[0-9]+$ ]]; then
         USER_MAX_ITERATIONS="$1"
@@ -99,7 +102,7 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-if [[ "$TOOL" != "amp" && "$TOOL" != "claude" ]]; then
+if [[ -z "$CUSTOM_TOOL" && "$TOOL" != "amp" && "$TOOL" != "claude" ]]; then
   echo "Error: Invalid tool '$TOOL'. Must be 'amp' or 'claude'." >&2
   exit 1
 fi
@@ -166,7 +169,7 @@ if [[ "$PHASE" != "implement" ]]; then
   exit 1
 fi
 
-echo "hermes-coding loop — project: $PROJECT_ROOT — tool: $TOOL — max: $MAX_ITERATIONS — visible: $VISIBLE"
+echo "hermes-coding loop — project: $PROJECT_ROOT — tool: ${CUSTOM_TOOL:-$TOOL} — max: $MAX_ITERATIONS — visible: $VISIBLE"
 
 # ── Main loop ────────────────────────────────────────────────────────
 
@@ -181,7 +184,57 @@ for i in $(seq 1 "$MAX_ITERATIONS"); do
   PROMPT=$(cat "$SKILL_FILE")
 
   # Invoke AI tool
-  if [[ "$VISIBLE" -eq 1 && "$(uname)" == "Darwin" ]]; then
+  if [[ -n "$CUSTOM_TOOL" && "$VISIBLE" -eq 0 ]]; then
+    USER_SHELL="${SHELL:-/bin/bash}"
+    echo "$PROMPT" | "$USER_SHELL" -i -c "$CUSTOM_TOOL" 2>&1 || true
+  elif [[ -n "$CUSTOM_TOOL" && "$VISIBLE" -eq 1 && "$(uname)" == "Darwin" ]]; then
+    PROMPT_FILE=$(mktemp "/tmp/hermes-prompt-${i}-XXXXXX")
+    echo "$PROMPT" > "$PROMPT_FILE"
+
+    MARKER_FILE=$(mktemp "/tmp/hermes-marker-${i}-XXXXXX")
+    rm -f "$MARKER_FILE"
+
+    WRAPPER_FILE=$(mktemp "/tmp/hermes-wrapper-${i}-XXXXXX.sh")
+    cat > "$WRAPPER_FILE" <<WRAPPER
+#!/bin/bash
+echo ""
+echo "╔══════════════════════════════════════════════════╗"
+echo "║  Hermes Phase 3 Iteration"
+echo "║  Iteration: ${i} / ${MAX_ITERATIONS}"
+echo "║  Close this window or type /exit when done"
+echo "╚══════════════════════════════════════════════════╝"
+echo ""
+
+export HERMES_CODING_WORKSPACE="${PROJECT_ROOT}"
+cd "${PROJECT_ROOT}"
+
+HERMES_PROMPT=\$(cat "${PROMPT_FILE}")
+echo "\$HERMES_PROMPT" | "${SHELL:-/bin/bash}" -i -c "${CUSTOM_TOOL}" 2>&1
+
+touch "${MARKER_FILE}"
+rm -f "${PROMPT_FILE}" "${WRAPPER_FILE}"
+echo ""
+echo "Task finished. This window will close in 5 seconds..."
+sleep 5
+exit 0
+WRAPPER
+    chmod +x "$WRAPPER_FILE"
+
+    echo "  Opening visible terminal window for Phase 3 iteration $i"
+    echo "  (Watch the tool work in the new window. Close it when done.)"
+    osascript -e "tell application \"Terminal\"
+      activate
+      do script \"clear && ${WRAPPER_FILE}\"
+    end tell"
+
+    echo "  Waiting for task to complete..."
+    while [[ ! -f "$MARKER_FILE" ]]; do
+      sleep 2
+    done
+    echo "  Iteration $i finished."
+    rm -f "$MARKER_FILE"
+
+  elif [[ "$VISIBLE" -eq 1 && "$(uname)" == "Darwin" ]]; then
     # ── Visible mode: interactive TUI in a new Terminal.app window ──
     #
     # Key difference from background mode:

@@ -130,6 +130,32 @@ describe('loop command', () => {
     );
   });
 
+  it('passes --custom flag to the loop script', async () => {
+    fs.writeJSONSync(stateFile, {
+      phase: 'implement',
+      startedAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    });
+
+    spawnSyncMock.mockReturnValue({
+      pid: 123,
+      output: [],
+      stdout: null,
+      stderr: null,
+      status: 0,
+      signal: null,
+    } as any);
+
+    registerLoopCommand(program, testDir);
+    await program.parseAsync(['node', 'test', 'loop', '--custom', 'codex --sandbox danger-full-access --ask-for-approval never']);
+
+    expect(spawnSyncMock).toHaveBeenCalledWith(
+      '/bin/bash',
+      expect.arrayContaining(['--custom', 'codex --sandbox danger-full-access --ask-for-approval never']),
+      expect.any(Object)
+    );
+  });
+
   it('returns the child exit code when the loop script stops with an error', async () => {
     fs.writeJSONSync(stateFile, {
       phase: 'implement',

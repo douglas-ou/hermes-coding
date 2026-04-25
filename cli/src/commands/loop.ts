@@ -15,13 +15,14 @@ export function registerLoopCommand(program: Command, workspaceDir: string): voi
     .command('loop')
     .description('Run the Phase 3 implement loop from the current terminal')
     .option('--tool <tool>', 'AI tool to use (claude or amp)', 'claude')
+    .option('--custom <command>', 'Custom tool command to run (e.g. "codex --approval-mode full-auto")')
     .option('--visible', 'Open a visible terminal window per iteration')
     .argument('[max-iterations]', 'Maximum number of iterations')
     .addHelpText(
       'after',
       '\nRun this after /hermes-coding or /hermes-coding resume has advanced the workflow to implement.'
     )
-    .action(async (maxIterations: string | undefined, options: { tool: string; visible: boolean }) => {
+    .action(async (maxIterations: string | undefined, options: { tool: string; visible: boolean; custom?: string }) => {
       try {
         const stateService = createStateService(workspaceDir);
         const state = await stateService.getState();
@@ -55,6 +56,7 @@ export function registerLoopCommand(program: Command, workspaceDir: string): voi
         }
 
         const scriptArgs: string[] = [loopScriptPath, '--tool', options.tool];
+        if (options.custom) scriptArgs.push('--custom', options.custom);
         if (options.visible) scriptArgs.push('--visible');
         if (maxIterations) scriptArgs.push(maxIterations);
 
