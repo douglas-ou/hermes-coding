@@ -250,10 +250,10 @@ WRAPPER
     rm -f "$MARKER_FILE"
 
   elif [[ "$TOOL" == "amp" ]]; then
-    echo "$PROMPT" | amp --dangerously-allow-all 2>&1 | tee /dev/stderr || true
+    echo "$PROMPT" | amp --dangerously-allow-all 2>&1 || true
   else
     echo "$PROMPT" | claude --dangerously-skip-permissions --print --verbose \
-      2>&1 | tee /dev/stderr || true
+      2>&1 || true
   fi
 
   NEXT_JSON=$(hermes-coding tasks next --json 2>/dev/null) || NEXT_JSON='{}'
