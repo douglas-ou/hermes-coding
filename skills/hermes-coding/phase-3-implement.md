@@ -131,6 +131,14 @@ The inner loop has no fixed retry limit. Continue until the task is terminal,
 committed with passing hook checks, and verified against acceptance criteria; or
 until a sub-agent marks it failed.
 
+The Step 4/5 orchestration loop has only two intended terminal outcomes:
+- the task is verified, then marked `complete`
+- a sub-agent explicitly marks the task `failed`
+
+`timeout`, `interrupted`, `no final result`, `commit hook failed`, and
+`NOT VERIFIED` all stay inside the loop. They are retry conditions, not exit
+conditions.
+
 ### 4.1 Spawn Implementer
 
 ```bash
@@ -159,13 +167,25 @@ The implementer must follow the prompt exactly:
 
 ### 4.2 Check Sub-Agent Result
 
-After the sub-agent returns:
+After the sub-agent run finishes, first determine whether the Task tool produced
+a normal final result.
+
+- If the run ended with `timeout`, `interrupted`, or `no final result`, do
+  **not** read a leftover `in_progress` status as "implementation ready". Do
+  **not** go to 4.3. Do **not** go to Step 5. Instead, spawn a fresh
+  implementer/fixer sub-agent that continues from the current repo state and
+  existing task progress, then return to 4.1.
+
+- Only if the sub-agent returned normally should the parent inspect
+  `TASK_STATUS`:
 
 ```bash
 TASK_STATUS=$(hermes-coding tasks get "$TASK_ID" --json | jq -r '.status // .data.status // "unknown"')
 ```
 
-- `in_progress` → proceed to 4.3
+- `in_progress` This means only that the task is not yet in a
+  terminal state; it does **not** mean the implementation is definitely ready
+  or that all acceptance criteria are satisfied.
 - `completed` → ERROR: implementer must not complete the task; exit 1
 - `unknown` → ERROR: unexpected status; exit 1
 - `failed` → spawn the progress promoter below, then exit 1
@@ -206,6 +226,10 @@ Task: ${TASK_ID} | Module: ${MODULE}"; then
   fi
 fi
 ```
+
+`No code changes to commit` only means there is no committable diff right now.
+It does **not** mean the task is complete. Still continue to Step 5 for
+verification.
 
 If `git commit` fails, spawn a fresh fixer sub-agent and loop back to 4.1:
 
@@ -257,8 +281,11 @@ Parameters:
   run_in_background: false
 ```
 
-If the verifier reports **NOT VERIFIED**, spawn an implementer/fixer sub-agent
-with the missing criteria and return to Step 4.
+If the verifier reports **NOT VERIFIED**, or if the previous normal-return
+attempt produced no committable changes and the verifier still cannot confirm
+the acceptance criteria, spawn an implementer/fixer sub-agent with the missing
+criteria and return to Step 4. The verifier output is the source of truth for
+what remains.
 
 If the verifier reports **VERIFIED**:
 
@@ -297,3 +324,9 @@ The outer loop will start the next scheduler iteration.
 - **ALWAYS** mark the selected task as completed or failed before exiting.
 - **DO NOT** spawn sub-agents from implementer/fixer/verifier sub-agents.
 - **DO NOT** transition the project phase here; the outer loop handles deliver transition.
+- **NEVER** trigger commit, verification, completion, or any other terminal path
+  after a sub-agent `timeout`, `interrupted`, or `no final result`. Restart the
+  implementation loop instead.
+- **DO NOT** treat `in_progress` as sufficient evidence that a task is ready for
+  commit. Only a normal sub-agent return followed by successful verification can
+  lead to completion.
