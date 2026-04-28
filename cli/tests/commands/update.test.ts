@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { Command } from 'commander';
 import { registerUpdateCommand } from '../../src/commands/update';
+import { version as currentVersion } from '../../package.json';
 
 // Mock child_process
 vi.mock('child_process', () => ({
@@ -136,7 +137,7 @@ describe('Update Command Integration', () => {
 
       vi.mocked(checkForUpdates).mockReturnValue({
         hasUpdate: true,
-        currentVersion: '0.1.2',
+        currentVersion,
         latestVersion: '99.0.0',
         fromCache: false,
       });
@@ -145,7 +146,7 @@ describe('Update Command Integration', () => {
 
       expect(checkForUpdates).toHaveBeenCalledWith({
         packageName: 'hermes-coding',
-        currentVersion: '0.1.2',
+        currentVersion,
         suppressNotificationOnly: true,
       });
       const allLogs = consoleLogSpy.mock.calls.flat().join('\n');
@@ -157,7 +158,7 @@ describe('Update Command Integration', () => {
       const { checkForUpdates } = await import('../../src/services/update-checker.service');
       vi.mocked(checkForUpdates).mockReturnValue({
         hasUpdate: true,
-        currentVersion: '0.1.2',
+        currentVersion,
         latestVersion: '99.0.0',
         fromCache: false,
       });
@@ -188,7 +189,7 @@ describe('Update Command Integration', () => {
       const { checkForUpdates } = await import('../../src/services/update-checker.service');
       vi.mocked(checkForUpdates).mockReturnValue({
         hasUpdate: false,
-        currentVersion: '0.1.2',
+        currentVersion,
         fromCache: false,
       });
 
@@ -202,7 +203,7 @@ describe('Update Command Integration', () => {
       const { checkForUpdates } = await import('../../src/services/update-checker.service');
       vi.mocked(checkForUpdates).mockReturnValue({
         hasUpdate: true,
-        currentVersion: '0.1.2',
+        currentVersion,
         latestVersion: '99.0.0',
         fromCache: false,
       });
@@ -333,7 +334,7 @@ describe('Update Command Integration', () => {
         if (cmdStr.includes('npm list -g')) {
           return JSON.stringify({
             dependencies: {
-              'hermes-coding': { version: '0.1.2' },
+              'hermes-coding': { version: currentVersion },
             },
           });
         }
@@ -351,7 +352,7 @@ describe('Update Command Integration', () => {
         'update',
         '--auto',
         '--target-version',
-        '0.1.2',
+        currentVersion,
         '--json',
       ]);
 
@@ -360,7 +361,7 @@ describe('Update Command Integration', () => {
       );
       expect(installCalls).toHaveLength(0);
       expect(syncSkills).toHaveBeenCalled();
-      expect(writeInstalledVersion).toHaveBeenCalledWith('0.1.2');
+      expect(writeInstalledVersion).toHaveBeenCalledWith(currentVersion);
       const allLogs = consoleLogSpy.mock.calls.flat().join('');
       expect(allLogs).toContain('"synced": true');
     });
@@ -377,7 +378,7 @@ describe('Update Command Integration', () => {
         if (cmdStr.includes('npm list -g')) {
           return JSON.stringify({
             dependencies: {
-              'hermes-coding': { version: '0.1.2' },
+              'hermes-coding': { version: currentVersion },
             },
           });
         }
@@ -467,7 +468,7 @@ describe('Update Command Integration', () => {
       const { checkForUpdates } = await import('../../src/services/update-checker.service');
       vi.mocked(checkForUpdates).mockReturnValue({
         hasUpdate: false,
-        currentVersion: '0.1.2',
+        currentVersion,
         fromCache: false,
       });
 
