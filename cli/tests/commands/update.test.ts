@@ -146,6 +146,7 @@ describe('Update Command Integration', () => {
       expect(checkForUpdates).toHaveBeenCalledWith({
         packageName: 'hermes-coding',
         currentVersion: '0.1.2',
+        suppressNotificationOnly: true,
       });
       const allLogs = consoleLogSpy.mock.calls.flat().join('\n');
       expect(allLogs).toContain('latestVersion');
@@ -284,6 +285,9 @@ describe('Update Command Integration', () => {
 
       vi.mocked(execSync).mockImplementation((cmd: any) => {
         const cmdStr = String(cmd);
+        if (cmdStr.includes('npm install -g hermes-coding@latest')) {
+          return '';
+        }
         if (cmdStr.includes('npm list -g')) {
           return JSON.stringify({
             dependencies: {
@@ -304,11 +308,15 @@ describe('Update Command Integration', () => {
       const allLogs = consoleLogSpy.mock.calls.flat().join('');
       expect(allLogs).toContain('"success": true');
       expect(allLogs).toContain('"synced": true');
+      expect(vi.mocked(execSync)).toHaveBeenCalledWith(
+        expect.stringContaining('npm install -g hermes-coding@latest'),
+        expect.any(Object)
+      );
       expect(writeInstalledVersion).toHaveBeenCalledWith('99.0.0');
       expect(processExitSpy).toHaveBeenLastCalledWith(0);
     });
 
-    it('should sync skills and mark installed version when CLI is already current', async () => {
+    it('should skip install only when target version is already installed', async () => {
       const { execSync } = await import('child_process');
       const { syncSkills } = await import('../../src/services/skill-sync.service');
       const { writeInstalledVersion } = await import('../../src/services/update-checker.service');
@@ -330,7 +338,15 @@ describe('Update Command Integration', () => {
         totalFiles: 1,
       });
 
-      await program.parseAsync(['node', 'test', 'update', '--auto', '--json']);
+      await program.parseAsync([
+        'node',
+        'test',
+        'update',
+        '--auto',
+        '--target-version',
+        '0.1.2',
+        '--json',
+      ]);
 
       const installCalls = vi.mocked(execSync).mock.calls.filter(
         call => String(call[0]).includes('npm install -g hermes-coding@latest')
@@ -340,6 +356,46 @@ describe('Update Command Integration', () => {
       expect(writeInstalledVersion).toHaveBeenCalledWith('0.1.2');
       const allLogs = consoleLogSpy.mock.calls.flat().join('');
       expect(allLogs).toContain('"synced": true');
+    });
+
+    it('should not skip install just because running CLI version matches installed version', async () => {
+      const { execSync } = await import('child_process');
+      const { syncSkills } = await import('../../src/services/skill-sync.service');
+
+      vi.mocked(execSync).mockImplementation((cmd: any) => {
+        const cmdStr = String(cmd);
+        if (cmdStr.includes('npm install -g hermes-coding@latest')) {
+          return '';
+        }
+        if (cmdStr.includes('npm list -g')) {
+          return JSON.stringify({
+            dependencies: {
+              'hermes-coding': { version: '0.1.2' },
+            },
+          });
+        }
+        return '';
+      });
+      vi.mocked(syncSkills).mockReturnValue({
+        target: '/tmp/ws/.claude/skills',
+        skills: { 'hermes-coding': ['SKILL.md'] },
+        totalFiles: 1,
+      });
+
+      await program.parseAsync([
+        'node',
+        'test',
+        'update',
+        '--auto',
+        '--target-version',
+        '99.0.0',
+        '--json',
+      ]);
+
+      expect(vi.mocked(execSync)).toHaveBeenCalledWith(
+        expect.stringContaining('npm install -g hermes-coding@latest'),
+        expect.any(Object)
+      );
     });
 
     it('should return error JSON for --auto when CLI update fails', async () => {

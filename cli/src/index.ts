@@ -43,7 +43,11 @@ const isUpdateCheckCommand =
   process.argv.includes('update') && process.argv.includes('--check');
 
 if (process.env.HERMES_CODING_AUTO_UPDATE === '1') {
-  const result = checkForUpdates({ packageName: name, currentVersion: version });
+  const result = checkForUpdates({
+    packageName: name,
+    currentVersion: version,
+    suppressNotificationOnly: true,
+  });
   if (result.hasUpdate && result.latestVersion) {
     console.error(chalk.dim(`Update available: ${version} -> ${result.latestVersion}`));
   }

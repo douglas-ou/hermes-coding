@@ -117,6 +117,21 @@ describe('update-checker.service', () => {
       expect(child_process.execSync).not.toHaveBeenCalled();
     });
 
+    it('should still perform explicit checks when NO_UPDATE_NOTIFIER is set but suppression is banner-only', () => {
+      process.env.NO_UPDATE_NOTIFIER = '1';
+      vi.mocked(child_process.execSync).mockReturnValue('2.0.0\n');
+
+      const result = checkForUpdates({
+        packageName: 'test-package',
+        currentVersion: '1.0.0',
+        suppressNotificationOnly: true,
+      });
+
+      expect(result.hasUpdate).toBe(true);
+      expect(result.latestVersion).toBe('2.0.0');
+      expect(child_process.execSync).toHaveBeenCalled();
+    });
+
     it('should detect update when npm returns newer version', () => {
       vi.mocked(child_process.execSync).mockReturnValue('2.0.0\n');
 

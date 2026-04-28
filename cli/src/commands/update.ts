@@ -33,6 +33,11 @@ interface UpdateResult {
 
 const PACKAGE_NAME = 'hermes-coding';
 
+interface AutoUpdateOptions {
+  json?: boolean;
+  targetVersion?: string;
+}
+
 function askConfirmation(question: string): Promise<boolean> {
   return new Promise((resolve) => {
     const rl = createInterface({
@@ -123,7 +128,7 @@ function updateCLI(silent: boolean = false): { success: boolean; newVersion?: st
  * In --auto mode, bash has already determined an update is needed,
  * so we skip the redundant npm view check and go straight to install.
  */
-function handleAutoUpdate(options: { json?: boolean }): void {
+function handleAutoUpdate(options: AutoUpdateOptions): void {
   const result: UpdateResult = {
     cli: {
       updated: false,
@@ -132,13 +137,19 @@ function handleAutoUpdate(options: { json?: boolean }): void {
   };
 
   const installedVersionBeforeUpdate = getInstalledVersion();
+  const normalizedTargetVersion = options.targetVersion?.trim().replace(/^v/, '');
   const cliAlreadyCurrent =
+    normalizedTargetVersion !== undefined &&
+    normalizedTargetVersion.length > 0 &&
     installedVersionBeforeUpdate !== null &&
-    installedVersionBeforeUpdate === currentVersion;
+    installedVersionBeforeUpdate === normalizedTargetVersion;
 
   let cliResult: { success: boolean; newVersion?: string; error?: string };
   if (cliAlreadyCurrent) {
-    cliResult = { success: true, newVersion: installedVersionBeforeUpdate ?? currentVersion };
+    cliResult = {
+      success: true,
+      newVersion: installedVersionBeforeUpdate ?? normalizedTargetVersion,
+    };
   } else {
     // Skip redundant npm view — bash already confirmed update is needed.
     // Go straight to npm install.
@@ -218,6 +229,7 @@ export function registerUpdateCommand(program: Command): void {
     .description('Manually update hermes-coding CLI')
     .option('--check', 'Check for updates without installing')
     .option('--auto', 'Non-interactive auto-update with skill sync (used by bootstrap)')
+    .option('--target-version <version>', 'Expected target version for auto-update completion checks')
     .option('--json', 'Output as JSON')
     .action(async (options) => {
       try {
@@ -238,6 +250,7 @@ export function registerUpdateCommand(program: Command): void {
           const checkResult = checkForUpdates({
             packageName: PACKAGE_NAME,
             currentVersion,
+            suppressNotificationOnly: true,
           });
 
           if (!checkResult.latestVersion) {

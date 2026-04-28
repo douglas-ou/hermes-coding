@@ -142,6 +142,13 @@ read_cache_field() {
   fi
 }
 
+read_cache_field_or_empty() {
+  local field="$1"
+  local value=""
+  value=$(read_cache_field "$field" || true)
+  echo "$value"
+}
+
 # Check if cache is still valid (within 24h interval)
 cache_is_fresh() {
   local last_checked
@@ -197,8 +204,8 @@ check_and_auto_update() {
   local latest_version installed_cache_version
 
   if cache_is_fresh; then
-    latest_version=$(read_cache_field "latestVersion")
-    installed_cache_version=$(read_cache_field "installedVersion")
+    latest_version=$(read_cache_field_or_empty "latestVersion")
+    installed_cache_version=$(read_cache_field_or_empty "installedVersion")
 
     # Already installed the latest? Fast path done.
     if [ -n "$latest_version" ] \
@@ -219,6 +226,7 @@ check_and_auto_update() {
     local check_output
     check_output=$(NO_UPDATE_NOTIFIER=1 hermes-coding update --check --json 2>/dev/null) || return 0
     latest_version=$(echo "$check_output" | grep -o '"latestVersion"[[:space:]]*:[[:space:]]*"[^"]*"' | head -1 | sed 's/.*:.*"\(.*\)"/\1/')
+    installed_cache_version=$(read_cache_field_or_empty "installedVersion")
 
     # No update needed
     if [ -z "$latest_version" ] || [ "$latest_version" = "$installed_version" ]; then
@@ -232,7 +240,7 @@ check_and_auto_update() {
     [ "$latest_version" = "$installed_version" ] && [ "$installed_cache_version" != "$latest_version" ]
   }; then
     log_step "Auto-updating hermes-coding: ${installed_version} -> ${latest_version}"
-    HERMES_CODING_AUTO_UPDATE=1 hermes-coding update --auto --json 2>/dev/null || {
+    HERMES_CODING_AUTO_UPDATE=1 hermes-coding update --auto --target-version "$latest_version" --json 2>/dev/null || {
       log_warning "Auto-update failed, continuing with v${installed_version}"
       return 0
     }

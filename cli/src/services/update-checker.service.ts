@@ -25,6 +25,8 @@ export interface UpdateCheckOptions {
   checkInterval?: number;
   /** Whether to show notification (default: true) */
   showNotification?: boolean;
+  /** Skip only the banner, but still allow explicit version checks */
+  suppressNotificationOnly?: boolean;
 }
 
 export interface CachedVersionInfo {
@@ -176,7 +178,12 @@ function isCacheValid(
  * 3. Returns update info
  */
 export function checkForUpdates(options: UpdateCheckOptions): UpdateCheckResult {
-  const { packageName, currentVersion, checkInterval = ONE_DAY_MS } = options;
+  const {
+    packageName,
+    currentVersion,
+    checkInterval = ONE_DAY_MS,
+    suppressNotificationOnly = false,
+  } = options;
 
   const result: UpdateCheckResult = {
     hasUpdate: false,
@@ -185,7 +192,7 @@ export function checkForUpdates(options: UpdateCheckOptions): UpdateCheckResult 
   };
 
   // Skip in CI environment
-  if (process.env.CI || process.env.NO_UPDATE_NOTIFIER) {
+  if (process.env.CI || (process.env.NO_UPDATE_NOTIFIER && !suppressNotificationOnly)) {
     return result;
   }
 
