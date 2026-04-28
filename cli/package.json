@@ -4,7 +4,10 @@
   "description": "CLI tool for hermes-coding - efficient operations for AI agents",
   "main": "dist/index.js",
   "bin": {
-    "hermes-coding": "bin/hermes-coding.js"
+    "hermes-coding": "bin/hermes-coding.js",
+    "hermes-coding-cli": "bin/hermes-coding.js",
+    "hcc": "bin/hermes-coding.js",
+    "hc": "bin/hermes-coding.js"
   },
   "files": [
     "dist",

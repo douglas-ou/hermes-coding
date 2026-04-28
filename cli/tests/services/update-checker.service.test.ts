@@ -7,7 +7,10 @@ import {
   compareVersions,
   showUpdateNotification,
   checkAndNotify,
+  writeInstalledVersion,
+  getCacheFilePath,
 } from '../../src/services/update-checker.service';
+import { readFileSync } from 'fs';
 
 // Mock child_process.execSync
 vi.mock('child_process', async () => {
@@ -114,6 +117,21 @@ describe('update-checker.service', () => {
       expect(child_process.execSync).not.toHaveBeenCalled();
     });
 
+    it('should still perform explicit checks when NO_UPDATE_NOTIFIER is set but suppression is banner-only', () => {
+      process.env.NO_UPDATE_NOTIFIER = '1';
+      vi.mocked(child_process.execSync).mockReturnValue('2.0.0\n');
+
+      const result = checkForUpdates({
+        packageName: 'test-package',
+        currentVersion: '1.0.0',
+        suppressNotificationOnly: true,
+      });
+
+      expect(result.hasUpdate).toBe(true);
+      expect(result.latestVersion).toBe('2.0.0');
+      expect(child_process.execSync).toHaveBeenCalled();
+    });
+
     it('should detect update when npm returns newer version', () => {
       vi.mocked(child_process.execSync).mockReturnValue('2.0.0\n');
 
@@ -137,6 +155,9 @@ describe('update-checker.service', () => {
 
       expect(result.hasUpdate).toBe(false);
       expect(result.latestVersion).toBe('1.0.0');
+
+      const cache = JSON.parse(readFileSync(getCacheFilePath(), 'utf-8'));
+      expect(cache.installedVersion).toBeNull();
     });
 
     it('should handle npm command failure gracefully', () => {
@@ -152,6 +173,15 @@ describe('update-checker.service', () => {
       expect(result.hasUpdate).toBe(false);
       // No latestVersion when network fails and no cache
       expect(result.latestVersion).toBeUndefined();
+    });
+
+    it('should persist installed version after successful install', () => {
+      writeInstalledVersion('2.0.0');
+
+      const cache = JSON.parse(readFileSync(getCacheFilePath(), 'utf-8'));
+      expect(cache.latestVersion).toBe('2.0.0');
+      expect(cache.checkedVersion).toBe('2.0.0');
+      expect(cache.installedVersion).toBe('2.0.0');
     });
   });
 

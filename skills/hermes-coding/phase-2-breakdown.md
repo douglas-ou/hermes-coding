@@ -22,8 +22,8 @@ Break down the PRD into atomic, testable tasks (each <30 minutes), create task f
 **IMPORTANT:** This skill requires the hermes-coding CLI. It will build automatically on first use.
 
 ```bash
-# Bootstrap CLI — verify or source from skill directory
-hermes-coding --version 2>/dev/null || source .claude/skills/hermes-coding/bootstrap-cli.sh
+# Bootstrap CLI — always source so auto-update can run
+source .claude/skills/hermes-coding/bootstrap-cli.sh
 
 # Verify CLI is ready
 hermes-coding --version

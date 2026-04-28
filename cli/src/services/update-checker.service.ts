@@ -25,6 +25,8 @@ export interface UpdateCheckOptions {
   checkInterval?: number;
   /** Whether to show notification (default: true) */
   showNotification?: boolean;
+  /** Skip only the banner, but still allow explicit version checks */
+  suppressNotificationOnly?: boolean;
 }
 
 export interface CachedVersionInfo {
@@ -34,6 +36,8 @@ export interface CachedVersionInfo {
   lastChecked: number;
   /** Current version at time of check */
   checkedVersion: string;
+  /** Version that was installed after auto-update (null if not yet installed) */
+  installedVersion?: string | null;
 }
 
 export interface UpdateCheckResult {
@@ -62,7 +66,7 @@ function getCacheDir(): string {
 /**
  * Get cache file path
  */
-function getCacheFilePath(): string {
+export function getCacheFilePath(): string {
   return join(getCacheDir(), CACHE_FILE);
 }
 
@@ -174,7 +178,12 @@ function isCacheValid(
  * 3. Returns update info
  */
 export function checkForUpdates(options: UpdateCheckOptions): UpdateCheckResult {
-  const { packageName, currentVersion, checkInterval = ONE_DAY_MS } = options;
+  const {
+    packageName,
+    currentVersion,
+    checkInterval = ONE_DAY_MS,
+    suppressNotificationOnly = false,
+  } = options;
 
   const result: UpdateCheckResult = {
     hasUpdate: false,
@@ -183,7 +192,7 @@ export function checkForUpdates(options: UpdateCheckOptions): UpdateCheckResult 
   };
 
   // Skip in CI environment
-  if (process.env.CI || process.env.NO_UPDATE_NOTIFIER) {
+  if (process.env.CI || (process.env.NO_UPDATE_NOTIFIER && !suppressNotificationOnly)) {
     return result;
   }
 
@@ -213,14 +222,18 @@ export function checkForUpdates(options: UpdateCheckOptions): UpdateCheckResult 
   }
 
   // Update cache
+  const hasUpdate = compareVersions(latestVersion, currentVersion) > 0;
+  const existingInstalledVersion = cache?.installedVersion ?? null;
   writeCache({
     latestVersion,
     lastChecked: Date.now(),
     checkedVersion: currentVersion,
+    // installedVersion is set only after a successful CLI install + skill sync.
+    installedVersion: hasUpdate ? null : existingInstalledVersion,
   });
 
   result.latestVersion = latestVersion;
-  result.hasUpdate = compareVersions(latestVersion, currentVersion) > 0;
+  result.hasUpdate = hasUpdate;
   return result;
 }
 
@@ -293,5 +306,27 @@ export function checkAndNotify(options: UpdateCheckOptions): void {
       result.latestVersion,
       options.packageName
     );
+  }
+}
+
+/**
+ * Record that an auto-update was successfully installed.
+ * Updates the cache's installedVersion AND checkedVersion so that:
+ * 1. Bash fast-path sees installedVersion == latestVersion and skips
+ * 2. Next CLI startup sees checkedVersion == currentVersion and keeps the cache valid
+ */
+export function writeInstalledVersion(version: string): void {
+  const cache = readCache();
+  if (cache) {
+    cache.installedVersion = version;
+    cache.checkedVersion = version;
+    writeCache(cache);
+  } else {
+    writeCache({
+      latestVersion: version,
+      lastChecked: Date.now(),
+      checkedVersion: version,
+      installedVersion: version,
+    });
   }
 }

@@ -22,7 +22,7 @@ That prompt is for the spawned implementer sub-agent, not for this orchestrator.
 ## Step 0: Bootstrap & Verify
 
 ```bash
-hermes-coding --version 2>/dev/null || source .claude/skills/hermes-coding/bootstrap-cli.sh
+source .claude/skills/hermes-coding/bootstrap-cli.sh
 
 CURRENT_PHASE=$(hermes-coding state get --json 2>/dev/null | jq -r '.data.phase // .phase // "none"')
 if [ "$CURRENT_PHASE" != "implement" ]; then

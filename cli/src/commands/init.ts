@@ -6,44 +6,12 @@
  */
 
 import { Command } from 'commander';
-import * as path from 'path';
-import * as fs from 'fs-extra';
 import chalk from 'chalk';
 import { ExitCode } from '../core/exit-codes';
 import { handleError, Errors } from '../core/error-handler';
 import { successResponse, outputResponse } from '../core/response-wrapper';
 import { createHookService } from './service-factory';
-
-// Root of the installed CLI package (two hops up from dist/commands/)
-const cliRoot = path.resolve(__dirname, '..', '..');
-
-/**
- * Resolve the source skills/ root directory.
- * Dual-path: bundled npm package first, then local monorepo fallback.
- */
-function resolveSkillsRoot(): string {
-  // 1. Published npm: plugin-assets/skills/ bundled at publish time
-  const bundled = path.join(cliRoot, 'plugin-assets', 'skills');
-  if (fs.existsSync(bundled)) {
-    return bundled;
-  }
-
-  // 2. Local dev / npm link: ../skills/ (monorepo layout)
-  const monorepo = path.resolve(cliRoot, '..', 'skills');
-  if (fs.existsSync(monorepo)) {
-    return monorepo;
-  }
-
-  throw new Error(
-    `Cannot locate skills assets.\n` +
-      `Checked:\n  ${bundled}\n  ${monorepo}`
-  );
-}
-
-/** Skip hidden files/directories (e.g. .DS_Store) */
-function skipHidden(_src: string, dest: string): boolean {
-  return !path.basename(dest).startsWith('.');
-}
+import { syncSkills } from '../services/skill-sync.service';
 
 export function registerInitCommand(program: Command): void {
   program
@@ -53,34 +21,10 @@ export function registerInitCommand(program: Command): void {
     .option('--no-hook', 'Skip pre-commit hook creation')
     .action(async (options) => {
       try {
-        const skillsRoot = resolveSkillsRoot();
-        const targetSkillsDir = path.join(process.cwd(), '.claude', 'skills');
-
-        // Enumerate skill subdirectories (hermes-coding, baseline-fixer, ...)
-        const skillNames = fs
-          .readdirSync(skillsRoot)
-          .filter((name) => !name.startsWith('.') && fs.statSync(path.join(skillsRoot, name)).isDirectory());
-
-        fs.mkdirpSync(targetSkillsDir);
-
-        // Copy each skill directory
-        const skills: Record<string, string[]> = {};
-        for (const skillName of skillNames) {
-          const srcDir = path.join(skillsRoot, skillName);
-          const destDir = path.join(targetSkillsDir, skillName);
-
-          fs.mkdirpSync(destDir);
-          fs.copySync(srcDir, destDir, { overwrite: true, filter: skipHidden });
-
-          skills[skillName] = fs
-            .readdirSync(destDir)
-            .filter((f) => !f.startsWith('.'));
-        }
-
-        const totalFiles = Object.values(skills).reduce((sum, files) => sum + files.length, 0);
+        const { target, skills, totalFiles } = syncSkills(process.cwd());
 
         const result: Record<string, any> = {
-          target: targetSkillsDir,
+          target,
           skills,
           totalFiles,
         };
@@ -102,7 +46,7 @@ export function registerInitCommand(program: Command): void {
           outputResponse(response, true);
         } else {
           console.log(chalk.green(`\n✓ hermes-coding skills installed\n`));
-          console.log(chalk.dim(`  Target: ${targetSkillsDir}`));
+          console.log(chalk.dim(`  Target: ${target}`));
           for (const [name, files] of Object.entries(skills)) {
             console.log(chalk.dim(`  ${name}/: ${files.join(', ')}`));
           }

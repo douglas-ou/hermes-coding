@@ -1,7 +1,8 @@
 /**
- * Update Command - Manually update hermes-coding CLI
+ * Update Command - Update hermes-coding CLI
  *
- * Provides manual control over CLI updates.
+ * Supports manual interactive updates and non-interactive auto-updates
+ * triggered by the bootstrap script.
  */
 
 import { Command } from 'commander';
@@ -10,7 +11,9 @@ import { createInterface } from 'readline';
 import chalk from 'chalk';
 import { ExitCode } from '../core/exit-codes';
 import { handleError, Errors } from '../core/error-handler';
-import { successResponse, outputResponse } from '../core/response-wrapper';
+import { errorResponse, successResponse, outputResponse } from '../core/response-wrapper';
+import { checkForUpdates, writeInstalledVersion } from '../services/update-checker.service';
+import { syncSkills } from '../services/skill-sync.service';
 import { version as currentVersion } from '../../package.json';
 
 interface UpdateResult {
@@ -20,9 +23,38 @@ interface UpdateResult {
     newVersion?: string;
     error?: string;
   };
+  skills?: {
+    synced: boolean;
+    target?: string;
+    totalFiles?: number;
+    error?: string;
+  };
 }
 
 const PACKAGE_NAME = 'hermes-coding';
+
+interface AutoUpdateOptions {
+  json?: boolean;
+  targetVersion?: string;
+}
+
+function finalizeUpdatedCLI(
+  result: UpdateResult,
+  workspaceDir: string
+): void {
+  const syncResult = syncSkills(workspaceDir);
+  result.skills = {
+    synced: true,
+    target: syncResult.target,
+    totalFiles: syncResult.totalFiles,
+  };
+
+  const installedVersion = getInstalledVersion() || result.cli.newVersion;
+  if (installedVersion) {
+    result.cli.newVersion = installedVersion;
+    writeInstalledVersion(installedVersion);
+  }
+}
 
 function askConfirmation(question: string): Promise<boolean> {
   return new Promise((resolve) => {
@@ -52,24 +84,51 @@ function getLatestVersion(): string | null {
   }
 }
 
-function updateCLI(): { success: boolean; newVersion?: string; error?: string } {
+function getInstalledVersion(): string | null {
   try {
-    console.log(chalk.cyan('\n🔄 Updating CLI via npm...\n'));
+    const result = execSync(`npm list -g ${PACKAGE_NAME} --depth=0 --json`, {
+      encoding: 'utf-8',
+      timeout: 30000,
+      stdio: ['pipe', 'pipe', 'pipe'],
+    });
+    const parsed = JSON.parse(result) as {
+      dependencies?: Record<string, { version?: string }>;
+    };
+    return parsed.dependencies?.[PACKAGE_NAME]?.version?.trim() || null;
+  } catch {
+    try {
+      const result = execSync(`${PACKAGE_NAME} --version`, {
+        encoding: 'utf-8',
+        timeout: 30000,
+        stdio: ['pipe', 'pipe', 'pipe'],
+      });
+      return result.trim().replace(/^v/, '');
+    } catch {
+      return null;
+    }
+  }
+}
+
+function updateCLI(silent: boolean = false): { success: boolean; newVersion?: string; error?: string } {
+  try {
+    if (!silent) {
+      console.log(chalk.cyan('\n🔄 Updating CLI via npm...\n'));
+    }
 
     execSync(`npm install -g ${PACKAGE_NAME}@latest`, {
-      stdio: 'inherit',
+      stdio: silent ? 'pipe' : 'inherit',
       timeout: 120000,
     });
 
-    const newVersion = getLatestVersion();
+    const newVersion = getInstalledVersion();
     return { success: true, newVersion: newVersion || undefined };
   } catch (error) {
     try {
       execSync(`npx npm install -g ${PACKAGE_NAME}@latest`, {
-        stdio: 'inherit',
+        stdio: silent ? 'pipe' : 'inherit',
         timeout: 120000,
       });
-      const newVersion = getLatestVersion();
+      const newVersion = getInstalledVersion();
       return { success: true, newVersion: newVersion || undefined };
     } catch (npxError) {
       return {
@@ -80,14 +139,111 @@ function updateCLI(): { success: boolean; newVersion?: string; error?: string } 
   }
 }
 
+/**
+ * Handle --auto mode: non-interactive update with skill sync.
+ * Used by bootstrap-cli.sh to auto-update the CLI.
+ *
+ * In --auto mode, bash has already determined an update is needed,
+ * so we skip the redundant npm view check and go straight to install.
+ */
+function handleAutoUpdate(options: AutoUpdateOptions): void {
+  const result: UpdateResult = {
+    cli: {
+      updated: false,
+      previousVersion: currentVersion,
+    },
+  };
+
+  const installedVersionBeforeUpdate = getInstalledVersion();
+  const normalizedTargetVersion = options.targetVersion?.trim().replace(/^v/, '');
+  const cliAlreadyCurrent =
+    normalizedTargetVersion !== undefined &&
+    normalizedTargetVersion.length > 0 &&
+    installedVersionBeforeUpdate !== null &&
+    installedVersionBeforeUpdate === normalizedTargetVersion;
+
+  let cliResult: { success: boolean; newVersion?: string; error?: string };
+  if (cliAlreadyCurrent) {
+    cliResult = {
+      success: true,
+      newVersion: installedVersionBeforeUpdate ?? normalizedTargetVersion,
+    };
+  } else {
+    // Skip redundant npm view — bash already confirmed update is needed.
+    // Go straight to npm install.
+    cliResult = updateCLI(true);
+  }
+
+  if (!cliResult.success) {
+    result.cli.error = cliResult.error;
+    outputResponse(
+      errorResponse(
+        'AUTO_UPDATE_FAILED',
+        cliResult.error || 'Failed to update hermes-coding CLI',
+        {
+          details: result,
+          recoverable: true,
+          suggestedAction: 'Check npm/network access and retry the update.',
+          metadata: { operation: 'update' },
+        }
+      ),
+      !!options.json
+    );
+    process.exit(ExitCode.GENERAL_ERROR);
+    return;
+  }
+
+  result.cli.updated = !cliAlreadyCurrent;
+  result.cli.newVersion = cliResult.newVersion;
+
+  try {
+    const workspaceDir = process.env.HERMES_CODING_WORKSPACE || process.cwd();
+    finalizeUpdatedCLI(result, workspaceDir);
+  } catch (skillError) {
+    result.skills = {
+      synced: false,
+      error: skillError instanceof Error ? skillError.message : String(skillError),
+    };
+  }
+
+  if (result.skills?.synced) {
+    outputResponse(successResponse(result, { operation: 'update' }), !!options.json);
+    process.exit(ExitCode.SUCCESS);
+    return;
+  }
+
+  outputResponse(
+    errorResponse(
+      'SKILL_SYNC_FAILED',
+      'CLI updated but failed to sync bundled skills',
+      {
+        details: result,
+        recoverable: true,
+        suggestedAction: 'Retry the update or run `hermes-coding init` in the workspace.',
+        metadata: { operation: 'update' },
+      }
+    ),
+    !!options.json
+  );
+  process.exit(ExitCode.GENERAL_ERROR);
+}
+
 export function registerUpdateCommand(program: Command): void {
   program
     .command('update')
     .description('Manually update hermes-coding CLI')
     .option('--check', 'Check for updates without installing')
+    .option('--auto', 'Non-interactive auto-update with skill sync (used by bootstrap)')
+    .option('--target-version <version>', 'Expected target version for auto-update completion checks')
     .option('--json', 'Output as JSON')
     .action(async (options) => {
       try {
+        // Auto-update mode (non-interactive, used by bootstrap)
+        if (options.auto) {
+          handleAutoUpdate(options);
+          return;
+        }
+
         const result: UpdateResult = {
           cli: {
             updated: false,
@@ -96,9 +252,13 @@ export function registerUpdateCommand(program: Command): void {
         };
 
         if (options.check) {
-          const latestVersion = getLatestVersion();
+          const checkResult = checkForUpdates({
+            packageName: PACKAGE_NAME,
+            currentVersion,
+            suppressNotificationOnly: true,
+          });
 
-          if (!latestVersion) {
+          if (!checkResult.latestVersion) {
             if (options.json) {
               outputResponse(successResponse({ error: 'Failed to check for updates' }, { operation: 'update-check' }), true);
             } else {
@@ -107,7 +267,8 @@ export function registerUpdateCommand(program: Command): void {
             process.exit(ExitCode.GENERAL_ERROR);
           }
 
-          const hasUpdate = latestVersion !== currentVersion;
+          const latestVersion = checkResult.latestVersion;
+          const hasUpdate = checkResult.hasUpdate;
 
           if (options.json) {
             outputResponse(successResponse({ currentVersion, latestVersion, updateAvailable: hasUpdate }, { operation: 'update-check' }), true);
@@ -150,7 +311,22 @@ export function registerUpdateCommand(program: Command): void {
           result.cli.error = cliResult.error;
 
           if (cliResult.success) {
-            console.log(chalk.green(`\n✓ CLI updated to v${cliResult.newVersion}\n`));
+            try {
+              const workspaceDir = process.env.HERMES_CODING_WORKSPACE || process.cwd();
+              finalizeUpdatedCLI(result, workspaceDir);
+            } catch (skillError) {
+              result.skills = {
+                synced: false,
+                error: skillError instanceof Error ? skillError.message : String(skillError),
+              };
+            }
+
+            console.log(chalk.green(`\n✓ CLI updated to v${result.cli.newVersion || cliResult.newVersion}\n`));
+            if (result.skills?.synced) {
+              console.log(chalk.dim('Bundled skills synced.\n'));
+            } else if (result.skills?.error) {
+              console.log(chalk.yellow(`\n⚠️ Skills sync failed: ${result.skills.error}\n`));
+            }
           } else {
             console.log(chalk.yellow(`\n⚠️ CLI update failed: ${cliResult.error}\n`));
           }
