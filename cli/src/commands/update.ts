@@ -1,7 +1,8 @@
 /**
- * Update Command - Manually update hermes-coding CLI
+ * Update Command - Update hermes-coding CLI
  *
- * Provides manual control over CLI updates.
+ * Supports manual interactive updates and non-interactive auto-updates
+ * triggered by the bootstrap script.
  */
 
 import { Command } from 'commander';
@@ -11,6 +12,8 @@ import chalk from 'chalk';
 import { ExitCode } from '../core/exit-codes';
 import { handleError, Errors } from '../core/error-handler';
 import { successResponse, outputResponse } from '../core/response-wrapper';
+import { writeInstalledVersion } from '../services/update-checker.service';
+import { syncSkills } from '../services/skill-sync.service';
 import { version as currentVersion } from '../../package.json';
 
 interface UpdateResult {
@@ -18,6 +21,12 @@ interface UpdateResult {
     updated: boolean;
     previousVersion: string;
     newVersion?: string;
+    error?: string;
+  };
+  skills?: {
+    synced: boolean;
+    target?: string;
+    totalFiles?: number;
     error?: string;
   };
 }
@@ -52,12 +61,14 @@ function getLatestVersion(): string | null {
   }
 }
 
-function updateCLI(): { success: boolean; newVersion?: string; error?: string } {
+function updateCLI(silent: boolean = false): { success: boolean; newVersion?: string; error?: string } {
   try {
-    console.log(chalk.cyan('\n🔄 Updating CLI via npm...\n'));
+    if (!silent) {
+      console.log(chalk.cyan('\n🔄 Updating CLI via npm...\n'));
+    }
 
     execSync(`npm install -g ${PACKAGE_NAME}@latest`, {
-      stdio: 'inherit',
+      stdio: silent ? 'pipe' : 'inherit',
       timeout: 120000,
     });
 
@@ -66,7 +77,7 @@ function updateCLI(): { success: boolean; newVersion?: string; error?: string } 
   } catch (error) {
     try {
       execSync(`npx npm install -g ${PACKAGE_NAME}@latest`, {
-        stdio: 'inherit',
+        stdio: silent ? 'pipe' : 'inherit',
         timeout: 120000,
       });
       const newVersion = getLatestVersion();
@@ -80,14 +91,84 @@ function updateCLI(): { success: boolean; newVersion?: string; error?: string } 
   }
 }
 
+/**
+ * Handle --auto mode: non-interactive update with skill sync.
+ * Used by bootstrap-cli.sh to auto-update the CLI.
+ *
+ * In --auto mode, bash has already determined an update is needed,
+ * so we skip the redundant npm view check and go straight to install.
+ */
+function handleAutoUpdate(options: { json?: boolean }): void {
+  const result: UpdateResult = {
+    cli: {
+      updated: false,
+      previousVersion: currentVersion,
+    },
+  };
+
+  // Skip redundant npm view — bash already confirmed update is needed.
+  // Go straight to npm install.
+  const cliResult = updateCLI(true);
+
+  if (!cliResult.success) {
+    result.cli.error = cliResult.error;
+    if (options.json) {
+      outputResponse(successResponse(result, { operation: 'update' }), true);
+    }
+    process.exit(ExitCode.GENERAL_ERROR);
+  }
+
+  result.cli.updated = true;
+  result.cli.newVersion = cliResult.newVersion;
+
+  // Sync skills after successful CLI update
+  let skillsSynced = false;
+  try {
+    const workspaceDir = process.env.HERMES_CODING_WORKSPACE || process.cwd();
+    const syncResult = syncSkills(workspaceDir);
+    result.skills = {
+      synced: true,
+      target: syncResult.target,
+      totalFiles: syncResult.totalFiles,
+    };
+    skillsSynced = true;
+  } catch (skillError) {
+    result.skills = {
+      synced: false,
+      error: skillError instanceof Error ? skillError.message : String(skillError),
+    };
+  }
+
+  // Only record installed version if both CLI update AND skills sync succeeded.
+  // If skills sync failed, don't mark as complete so bash will retry next time.
+  if (skillsSynced) {
+    writeInstalledVersion(cliResult.newVersion || 'unknown');
+  }
+
+  const response = successResponse(result, { operation: 'update' });
+
+  if (options.json) {
+    outputResponse(response, true);
+  }
+
+  process.exit(skillsSynced ? ExitCode.SUCCESS : ExitCode.GENERAL_ERROR);
+}
+
 export function registerUpdateCommand(program: Command): void {
   program
     .command('update')
     .description('Manually update hermes-coding CLI')
     .option('--check', 'Check for updates without installing')
+    .option('--auto', 'Non-interactive auto-update with skill sync (used by bootstrap)')
     .option('--json', 'Output as JSON')
     .action(async (options) => {
       try {
+        // Auto-update mode (non-interactive, used by bootstrap)
+        if (options.auto) {
+          handleAutoUpdate(options);
+          return;
+        }
+
         const result: UpdateResult = {
           cli: {
             updated: false,

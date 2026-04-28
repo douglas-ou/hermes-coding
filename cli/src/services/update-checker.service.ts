@@ -34,6 +34,8 @@ export interface CachedVersionInfo {
   lastChecked: number;
   /** Current version at time of check */
   checkedVersion: string;
+  /** Version that was installed after auto-update (null if not yet installed) */
+  installedVersion?: string | null;
 }
 
 export interface UpdateCheckResult {
@@ -62,7 +64,7 @@ function getCacheDir(): string {
 /**
  * Get cache file path
  */
-function getCacheFilePath(): string {
+export function getCacheFilePath(): string {
   return join(getCacheDir(), CACHE_FILE);
 }
 
@@ -217,6 +219,7 @@ export function checkForUpdates(options: UpdateCheckOptions): UpdateCheckResult 
     latestVersion,
     lastChecked: Date.now(),
     checkedVersion: currentVersion,
+    installedVersion: null,
   });
 
   result.latestVersion = latestVersion;
@@ -293,5 +296,27 @@ export function checkAndNotify(options: UpdateCheckOptions): void {
       result.latestVersion,
       options.packageName
     );
+  }
+}
+
+/**
+ * Record that an auto-update was successfully installed.
+ * Updates the cache's installedVersion AND checkedVersion so that:
+ * 1. Bash fast-path sees installedVersion == latestVersion and skips
+ * 2. Next CLI startup sees checkedVersion == currentVersion and keeps the cache valid
+ */
+export function writeInstalledVersion(version: string): void {
+  const cache = readCache();
+  if (cache) {
+    cache.installedVersion = version;
+    cache.checkedVersion = version;
+    writeCache(cache);
+  } else {
+    writeCache({
+      latestVersion: version,
+      lastChecked: Date.now(),
+      checkedVersion: version,
+      installedVersion: version,
+    });
   }
 }

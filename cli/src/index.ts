@@ -9,7 +9,8 @@ import { registerLoopCommand } from './commands/loop';
 import { registerUpdateCommand } from './commands/update';
 import { registerInitCommand } from './commands/init';
 import { registerProgressCommands } from './commands/progress';
-import { checkAndNotify } from './services/update-checker.service';
+import { checkAndNotify, checkForUpdates } from './services/update-checker.service';
+import chalk from 'chalk';
 import { version, name } from '../package.json';
 
 const program = new Command();
@@ -35,10 +36,18 @@ registerProgressCommands(program, workspaceDir);
 // Auto-update check - runs on EVERY command execution
 // Shows notification if update available (cached check, 24 hour interval)
 // Skip if NO_UPDATE_NOTIFIER is set or in CI environment
-checkAndNotify({
-  packageName: name,
-  currentVersion: version,
-});
+// In auto-update mode (triggered by bootstrap), suppress the banner
+if (process.env.HERMES_CODING_AUTO_UPDATE === '1') {
+  const result = checkForUpdates({ packageName: name, currentVersion: version });
+  if (result.hasUpdate && result.latestVersion) {
+    console.error(chalk.dim(`Update available: ${version} -> ${result.latestVersion}`));
+  }
+} else {
+  checkAndNotify({
+    packageName: name,
+    currentVersion: version,
+  });
+}
 
 // Parse command line arguments
 program.parse(process.argv);
