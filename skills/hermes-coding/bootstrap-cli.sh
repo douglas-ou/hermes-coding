@@ -4,7 +4,7 @@
 # Include this at the top of every skill that uses hermes-coding
 #
 # Usage in phase files:
-#   hermes-coding --version 2>/dev/null || source .claude/skills/hermes-coding/bootstrap-cli.sh
+#   source .claude/skills/hermes-coding/bootstrap-cli.sh
 #
 # This script will:
 # 1. Check if hermes-coding CLI is globally installed
@@ -114,7 +114,8 @@ validate_cli() {
 # ============================================================
 
 # Cache file shared with the CLI's update-checker.service.ts
-UPDATE_CACHE_FILE="$HOME/.config/configstore/hermes-coding-update-check.json"
+UPDATE_CACHE_DIR="${HERMES_CODING_CACHE_DIR:-$HOME/.config/configstore}"
+UPDATE_CACHE_FILE="${UPDATE_CACHE_DIR}/hermes-coding-update-check.json"
 UPDATE_CHECK_INTERVAL_SECS=$((24 * 60 * 60))  # 24 hours
 
 # Read a field from the update cache JSON file (jq or grep fallback)
@@ -206,6 +207,13 @@ check_and_auto_update() {
       && [ "$installed_version" = "$latest_version" ]; then
       return 0
     fi
+
+    # Cache is fresh and a newer CLI is known.
+    # Even if the CLI is already updated, a missing installedVersion means
+    # the previous auto-update likely failed during skills sync, so retry --auto.
+    if [ -z "$latest_version" ]; then
+      return 0
+    fi
   else
     # Cache expired: ask CLI to check and refresh cache
     local check_output
@@ -218,8 +226,11 @@ check_and_auto_update() {
     fi
   fi
 
-  # Update available — install it
-  if version_gt "$latest_version" "$installed_version"; then
+  # Update available — install it, or retry completion when CLI is already latest
+  # but the cache still lacks installedVersion after a prior skills sync failure.
+  if version_gt "$latest_version" "$installed_version" || {
+    [ "$latest_version" = "$installed_version" ] && [ "$installed_cache_version" != "$latest_version" ]
+  }; then
     log_step "Auto-updating hermes-coding: ${installed_version} -> ${latest_version}"
     HERMES_CODING_AUTO_UPDATE=1 hermes-coding update --auto --json 2>/dev/null || {
       log_warning "Auto-update failed, continuing with v${installed_version}"
@@ -344,7 +355,6 @@ bootstrap_hermes_coding_cli() {
 
   if [ "$force_rebuild" != "1" ]; then
     if check_global_cli && validate_cli; then
-      log_success "hermes-coding CLI ready (global: $(get_global_version))"
       check_and_auto_update
       return 0
     fi

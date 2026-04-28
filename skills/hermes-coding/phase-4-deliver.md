@@ -23,8 +23,8 @@ Run quality gates, perform two-stage code review, create commit, and optionally 
 **IMPORTANT:** This skill requires the hermes-coding CLI. It will build automatically on first use.
 
 ```bash
-# Bootstrap CLI — verify or source from skill directory
-hermes-coding --version 2>/dev/null || source .claude/skills/hermes-coding/bootstrap-cli.sh
+# Bootstrap CLI — always source so auto-update can run
+source .claude/skills/hermes-coding/bootstrap-cli.sh
 
 # Verify CLI is ready
 hermes-coding --version

@@ -7,7 +7,10 @@ import {
   compareVersions,
   showUpdateNotification,
   checkAndNotify,
+  writeInstalledVersion,
+  getCacheFilePath,
 } from '../../src/services/update-checker.service';
+import { readFileSync } from 'fs';
 
 // Mock child_process.execSync
 vi.mock('child_process', async () => {
@@ -137,6 +140,9 @@ describe('update-checker.service', () => {
 
       expect(result.hasUpdate).toBe(false);
       expect(result.latestVersion).toBe('1.0.0');
+
+      const cache = JSON.parse(readFileSync(getCacheFilePath(), 'utf-8'));
+      expect(cache.installedVersion).toBe('1.0.0');
     });
 
     it('should handle npm command failure gracefully', () => {
@@ -152,6 +158,15 @@ describe('update-checker.service', () => {
       expect(result.hasUpdate).toBe(false);
       // No latestVersion when network fails and no cache
       expect(result.latestVersion).toBeUndefined();
+    });
+
+    it('should persist installed version after successful install', () => {
+      writeInstalledVersion('2.0.0');
+
+      const cache = JSON.parse(readFileSync(getCacheFilePath(), 'utf-8'));
+      expect(cache.latestVersion).toBe('2.0.0');
+      expect(cache.checkedVersion).toBe('2.0.0');
+      expect(cache.installedVersion).toBe('2.0.0');
     });
   });
 

@@ -215,15 +215,18 @@ export function checkForUpdates(options: UpdateCheckOptions): UpdateCheckResult 
   }
 
   // Update cache
+  const hasUpdate = compareVersions(latestVersion, currentVersion) > 0;
   writeCache({
     latestVersion,
     lastChecked: Date.now(),
     checkedVersion: currentVersion,
-    installedVersion: null,
+    // Null means "newer version known but not yet applied".
+    // When we're already on the latest version, record it so bootstrap can fast-path.
+    installedVersion: hasUpdate ? null : currentVersion,
   });
 
   result.latestVersion = latestVersion;
-  result.hasUpdate = compareVersions(latestVersion, currentVersion) > 0;
+  result.hasUpdate = hasUpdate;
   return result;
 }
 

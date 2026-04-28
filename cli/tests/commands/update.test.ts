@@ -8,6 +8,7 @@ vi.mock('child_process', () => ({
 }));
 
 vi.mock('../../src/services/update-checker.service', () => ({
+  checkForUpdates: vi.fn(),
   writeInstalledVersion: vi.fn(),
 }));
 
@@ -130,9 +131,35 @@ describe('Update Command Integration', () => {
   });
 
   describe('--check mode', () => {
+    it('should use shared update checker service for --check', async () => {
+      const { checkForUpdates } = await import('../../src/services/update-checker.service');
+
+      vi.mocked(checkForUpdates).mockReturnValue({
+        hasUpdate: true,
+        currentVersion: '0.1.2',
+        latestVersion: '99.0.0',
+        fromCache: false,
+      });
+
+      await program.parseAsync(['node', 'test', 'update', '--check', '--json']);
+
+      expect(checkForUpdates).toHaveBeenCalledWith({
+        packageName: 'hermes-coding',
+        currentVersion: '0.1.2',
+      });
+      const allLogs = consoleLogSpy.mock.calls.flat().join('\n');
+      expect(allLogs).toContain('latestVersion');
+      expect(allLogs).toContain('99.0.0');
+    });
+
     it('should show update available when new version exists', async () => {
-      const { execSync } = await import('child_process');
-      vi.mocked(execSync).mockReturnValue('99.0.0\n');
+      const { checkForUpdates } = await import('../../src/services/update-checker.service');
+      vi.mocked(checkForUpdates).mockReturnValue({
+        hasUpdate: true,
+        currentVersion: '0.1.2',
+        latestVersion: '99.0.0',
+        fromCache: false,
+      });
 
       await program.parseAsync(['node', 'test', 'update', '--check']);
 
@@ -141,9 +168,14 @@ describe('Update Command Integration', () => {
     });
 
     it('should show up to date when on latest version', async () => {
-      const { execSync } = await import('child_process');
       const { version } = await import('../../package.json');
-      vi.mocked(execSync).mockReturnValue(`${version}\n`);
+      const { checkForUpdates } = await import('../../src/services/update-checker.service');
+      vi.mocked(checkForUpdates).mockReturnValue({
+        hasUpdate: false,
+        currentVersion: version,
+        latestVersion: version,
+        fromCache: false,
+      });
 
       await program.parseAsync(['node', 'test', 'update', '--check']);
 
@@ -152,9 +184,11 @@ describe('Update Command Integration', () => {
     });
 
     it('should handle npm view failure', async () => {
-      const { execSync } = await import('child_process');
-      vi.mocked(execSync).mockImplementation(() => {
-        throw new Error('npm view failed');
+      const { checkForUpdates } = await import('../../src/services/update-checker.service');
+      vi.mocked(checkForUpdates).mockReturnValue({
+        hasUpdate: false,
+        currentVersion: '0.1.2',
+        fromCache: false,
       });
 
       await program.parseAsync(['node', 'test', 'update', '--check']);
@@ -164,8 +198,13 @@ describe('Update Command Integration', () => {
     });
 
     it('should output JSON when --json flag is used with --check', async () => {
-      const { execSync } = await import('child_process');
-      vi.mocked(execSync).mockReturnValue('99.0.0\n');
+      const { checkForUpdates } = await import('../../src/services/update-checker.service');
+      vi.mocked(checkForUpdates).mockReturnValue({
+        hasUpdate: true,
+        currentVersion: '0.1.2',
+        latestVersion: '99.0.0',
+        fromCache: false,
+      });
 
       await program.parseAsync(['node', 'test', 'update', '--check', '--json']);
 
@@ -178,6 +217,7 @@ describe('Update Command Integration', () => {
   describe('CLI update', () => {
     it('should update CLI successfully', async () => {
       const { execSync } = await import('child_process');
+      process.env.CI = 'true';
       vi.mocked(execSync).mockReturnValue('99.0.0\n');
 
       await program.parseAsync(['node', 'test', 'update']);
@@ -190,6 +230,7 @@ describe('Update Command Integration', () => {
 
     it('should try npx when npm fails', async () => {
       const { execSync } = await import('child_process');
+      process.env.CI = 'true';
 
       let callCount = 0;
       vi.mocked(execSync).mockImplementation((cmd: any) => {
@@ -210,6 +251,7 @@ describe('Update Command Integration', () => {
 
     it('should handle update failure', async () => {
       const { execSync } = await import('child_process');
+      process.env.CI = 'true';
 
       vi.mocked(execSync).mockImplementation((cmd: any) => {
         const cmdStr = String(cmd);
@@ -264,6 +306,40 @@ describe('Update Command Integration', () => {
       expect(allLogs).toContain('"synced": true');
       expect(writeInstalledVersion).toHaveBeenCalledWith('99.0.0');
       expect(processExitSpy).toHaveBeenLastCalledWith(0);
+    });
+
+    it('should sync skills and mark installed version when CLI is already current', async () => {
+      const { execSync } = await import('child_process');
+      const { syncSkills } = await import('../../src/services/skill-sync.service');
+      const { writeInstalledVersion } = await import('../../src/services/update-checker.service');
+
+      vi.mocked(execSync).mockImplementation((cmd: any) => {
+        const cmdStr = String(cmd);
+        if (cmdStr.includes('npm list -g')) {
+          return JSON.stringify({
+            dependencies: {
+              'hermes-coding': { version: '0.1.2' },
+            },
+          });
+        }
+        return '';
+      });
+      vi.mocked(syncSkills).mockReturnValue({
+        target: '/tmp/ws/.claude/skills',
+        skills: { 'hermes-coding': ['SKILL.md'] },
+        totalFiles: 1,
+      });
+
+      await program.parseAsync(['node', 'test', 'update', '--auto', '--json']);
+
+      const installCalls = vi.mocked(execSync).mock.calls.filter(
+        call => String(call[0]).includes('npm install -g hermes-coding@latest')
+      );
+      expect(installCalls).toHaveLength(0);
+      expect(syncSkills).toHaveBeenCalled();
+      expect(writeInstalledVersion).toHaveBeenCalledWith('0.1.2');
+      const allLogs = consoleLogSpy.mock.calls.flat().join('');
+      expect(allLogs).toContain('"synced": true');
     });
 
     it('should return error JSON for --auto when CLI update fails', async () => {
@@ -325,10 +401,11 @@ describe('Update Command Integration', () => {
     });
 
     it('should handle errors in non-JSON mode during --check', async () => {
-      const { execSync } = await import('child_process');
-
-      vi.mocked(execSync).mockImplementation(() => {
-        throw new Error('Network error');
+      const { checkForUpdates } = await import('../../src/services/update-checker.service');
+      vi.mocked(checkForUpdates).mockReturnValue({
+        hasUpdate: false,
+        currentVersion: '0.1.2',
+        fromCache: false,
       });
 
       await program.parseAsync(['node', 'test', 'update', '--check']);
@@ -360,6 +437,7 @@ describe('Update Command Integration', () => {
   describe('Non-JSON output messages', () => {
     it('should display restart message in non-JSON mode', async () => {
       const { execSync } = await import('child_process');
+      process.env.CI = 'true';
 
       vi.mocked(execSync).mockReturnValue('0.5.0\n');
 

@@ -12,7 +12,7 @@ import chalk from 'chalk';
 import { ExitCode } from '../core/exit-codes';
 import { handleError, Errors } from '../core/error-handler';
 import { errorResponse, successResponse, outputResponse } from '../core/response-wrapper';
-import { writeInstalledVersion } from '../services/update-checker.service';
+import { checkForUpdates, writeInstalledVersion } from '../services/update-checker.service';
 import { syncSkills } from '../services/skill-sync.service';
 import { version as currentVersion } from '../../package.json';
 
@@ -131,9 +131,19 @@ function handleAutoUpdate(options: { json?: boolean }): void {
     },
   };
 
-  // Skip redundant npm view — bash already confirmed update is needed.
-  // Go straight to npm install.
-  const cliResult = updateCLI(true);
+  const installedVersionBeforeUpdate = getInstalledVersion();
+  const cliAlreadyCurrent =
+    installedVersionBeforeUpdate !== null &&
+    installedVersionBeforeUpdate === currentVersion;
+
+  let cliResult: { success: boolean; newVersion?: string; error?: string };
+  if (cliAlreadyCurrent) {
+    cliResult = { success: true, newVersion: installedVersionBeforeUpdate ?? currentVersion };
+  } else {
+    // Skip redundant npm view — bash already confirmed update is needed.
+    // Go straight to npm install.
+    cliResult = updateCLI(true);
+  }
 
   if (!cliResult.success) {
     result.cli.error = cliResult.error;
@@ -154,7 +164,7 @@ function handleAutoUpdate(options: { json?: boolean }): void {
     return;
   }
 
-  result.cli.updated = true;
+  result.cli.updated = !cliAlreadyCurrent;
   result.cli.newVersion = cliResult.newVersion;
 
   // Sync skills after successful CLI update
@@ -225,9 +235,12 @@ export function registerUpdateCommand(program: Command): void {
         };
 
         if (options.check) {
-          const latestVersion = getLatestVersion();
+          const checkResult = checkForUpdates({
+            packageName: PACKAGE_NAME,
+            currentVersion,
+          });
 
-          if (!latestVersion) {
+          if (!checkResult.latestVersion) {
             if (options.json) {
               outputResponse(successResponse({ error: 'Failed to check for updates' }, { operation: 'update-check' }), true);
             } else {
@@ -236,7 +249,8 @@ export function registerUpdateCommand(program: Command): void {
             process.exit(ExitCode.GENERAL_ERROR);
           }
 
-          const hasUpdate = latestVersion !== currentVersion;
+          const latestVersion = checkResult.latestVersion;
+          const hasUpdate = checkResult.hasUpdate;
 
           if (options.json) {
             outputResponse(successResponse({ currentVersion, latestVersion, updateAvailable: hasUpdate }, { operation: 'update-check' }), true);

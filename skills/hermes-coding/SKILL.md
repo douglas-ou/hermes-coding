@@ -51,7 +51,7 @@ All state persists in `.hermes-coding/`:
 ### Step 0: Bootstrap CLI
 
 ```bash
-hermes-coding --version 2>/dev/null || source .claude/skills/hermes-coding/bootstrap-cli.sh
+source .claude/skills/hermes-coding/bootstrap-cli.sh
 ```
 
 ### Initialize
@@ -119,7 +119,7 @@ Parameters:
     ---
     ## Context
     - Workspace: {current working directory}
-    - Bootstrap: hermes-coding --version 2>/dev/null || source .claude/skills/hermes-coding/bootstrap-cli.sh
+    - Bootstrap: source .claude/skills/hermes-coding/bootstrap-cli.sh
     - {any phase-specific context from conversation}
   run_in_background: false
 ```
