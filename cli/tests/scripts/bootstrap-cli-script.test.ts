@@ -41,12 +41,9 @@ if [ "$1" = "--version" ]; then
   echo "0.1.2"
   exit 0
 fi
-if [ "$1" = "update" ] && [ "$2" = "--auto" ] && [ "$3" = "--json" ]; then
-  echo "update --auto --json" >> "$CALL_LOG"
-  exit 0
-fi
-if [ "$1" = "update" ] && [ "$2" = "--auto" ] && [ "$3" = "--target-version" ] && [ "$5" = "--json" ]; then
-  echo "update --auto --target-version $4 --json" >> "$CALL_LOG"
+if [ "$1" = "update" ] && [ "$2" = "--auto" ] && [ "$3" = "--target-version" ]; then
+  echo "update --auto --target-version $4" >> "$CALL_LOG"
+  echo '{"success":true}' 
   exit 0
 fi
 if [ "$1" = "update" ] && [ "$2" = "--check" ] && [ "$3" = "--json" ]; then
@@ -112,8 +109,9 @@ describe('bootstrap-cli.sh', () => {
     );
 
     expect(result.status).toBe(0);
+    expect(result.stdout).toBe('');
     const callLog = fs.readFileSync(callLogPath, 'utf-8');
-    expect(callLog).toContain('update --auto --target-version 0.1.2 --json');
+    expect(callLog).toContain('update --auto --target-version 0.1.2');
     expect(callLog).not.toContain('update --check --json');
   });
 
@@ -174,6 +172,37 @@ describe('bootstrap-cli.sh', () => {
 
     expect(result.status).toBe(0);
     const callLog = fs.readFileSync(callLogPath, 'utf-8');
-    expect(callLog).toContain('update --auto --target-version 0.1.2 --json');
+    expect(callLog).toContain('update --auto --target-version 0.1.2');
+  });
+
+  it('should skip auto-update when CI=1', () => {
+    const { binDir, cacheDir, callLogPath } = seedBootstrapWorkspace(workspaceDir);
+    const now = Date.now();
+
+    fs.writeJSONSync(path.join(cacheDir, 'hermes-coding-update-check.json'), {
+      latestVersion: '0.2.0',
+      lastChecked: now,
+      checkedVersion: '0.1.2',
+      installedVersion: null,
+    });
+
+    const result = spawnSync(
+      '/bin/bash',
+      ['-lc', `source "${bootstrapScriptPath}"`],
+      {
+        cwd: workspaceDir,
+        encoding: 'utf-8',
+        env: {
+          ...process.env,
+          CI: '1',
+          PATH: `${binDir}:${process.env.PATH || ''}`,
+          HERMES_CODING_CACHE_DIR: cacheDir,
+        },
+      }
+    );
+
+    expect(result.status).toBe(0);
+    const callLog = fs.readFileSync(callLogPath, 'utf-8');
+    expect(callLog).toBe('');
   });
 });

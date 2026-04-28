@@ -85,6 +85,17 @@ log_step() {
   echo -e "${CYAN}▸${NC} $*" >&2
 }
 
+is_truthy() {
+  case "${1:-}" in
+    1|true|TRUE|yes|YES|on|ON)
+      return 0
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+}
+
 # ============================================================
 # CLI Detection Functions
 # ============================================================
@@ -186,7 +197,7 @@ check_and_auto_update() {
   # Skip in special modes
   [ "${FORCE_REBUILD:-0}" = "1" ] && return 0
   [ "${SKIP_BOOTSTRAP:-0}" = "1" ] && return 0
-  [ "${CI:-}" = "true" ] && return 0
+  is_truthy "${CI:-}" && return 0
   [ "${NO_UPDATE_NOTIFIER:-}" = "1" ] && return 0
 
   # Skip if hermes-coding is a shell function (local build mode),
@@ -240,7 +251,7 @@ check_and_auto_update() {
     [ "$latest_version" = "$installed_version" ] && [ "$installed_cache_version" != "$latest_version" ]
   }; then
     log_step "Auto-updating hermes-coding: ${installed_version} -> ${latest_version}"
-    HERMES_CODING_AUTO_UPDATE=1 hermes-coding update --auto --target-version "$latest_version" --json 2>/dev/null || {
+    HERMES_CODING_AUTO_UPDATE=1 hermes-coding update --auto --target-version "$latest_version" >/dev/null 2>/dev/null || {
       log_warning "Auto-update failed, continuing with v${installed_version}"
       return 0
     }

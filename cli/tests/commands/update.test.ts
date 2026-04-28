@@ -218,8 +218,14 @@ describe('Update Command Integration', () => {
   describe('CLI update', () => {
     it('should update CLI successfully', async () => {
       const { execSync } = await import('child_process');
+      const { syncSkills } = await import('../../src/services/skill-sync.service');
       process.env.CI = 'true';
       vi.mocked(execSync).mockReturnValue('99.0.0\n');
+      vi.mocked(syncSkills).mockReturnValue({
+        target: '/tmp/ws/.claude/skills',
+        skills: { 'hermes-coding': ['SKILL.md'] },
+        totalFiles: 1,
+      });
 
       await program.parseAsync(['node', 'test', 'update']);
 
@@ -227,6 +233,7 @@ describe('Update Command Integration', () => {
         expect.stringContaining('npm install -g hermes-coding@latest'),
         expect.any(Object)
       );
+      expect(syncSkills).toHaveBeenCalled();
     });
 
     it('should try npx when npm fails', async () => {
@@ -493,14 +500,39 @@ describe('Update Command Integration', () => {
   describe('Non-JSON output messages', () => {
     it('should display restart message in non-JSON mode', async () => {
       const { execSync } = await import('child_process');
+      const { syncSkills } = await import('../../src/services/skill-sync.service');
       process.env.CI = 'true';
 
       vi.mocked(execSync).mockReturnValue('0.5.0\n');
+      vi.mocked(syncSkills).mockReturnValue({
+        target: '/tmp/ws/.claude/skills',
+        skills: { 'hermes-coding': ['SKILL.md'] },
+        totalFiles: 1,
+      });
 
       await program.parseAsync(['node', 'test', 'update']);
 
       const allLogs = consoleLogSpy.mock.calls.flat().join('\n');
       expect(allLogs).toContain('restart the CLI');
+    });
+
+    it('should show skills sync failure in manual update mode but still succeed', async () => {
+      const { execSync } = await import('child_process');
+      const { syncSkills } = await import('../../src/services/skill-sync.service');
+      const { writeInstalledVersion } = await import('../../src/services/update-checker.service');
+      process.env.CI = 'true';
+
+      vi.mocked(execSync).mockReturnValue('0.5.0\n');
+      vi.mocked(syncSkills).mockImplementation(() => {
+        throw new Error('sync failed');
+      });
+
+      await program.parseAsync(['node', 'test', 'update']);
+
+      const allLogs = consoleLogSpy.mock.calls.flat().join('\n');
+      expect(allLogs).toContain('Skills sync failed');
+      expect(writeInstalledVersion).not.toHaveBeenCalled();
+      expect(processExitSpy).toHaveBeenLastCalledWith(0);
     });
   });
 

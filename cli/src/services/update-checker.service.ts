@@ -223,13 +223,13 @@ export function checkForUpdates(options: UpdateCheckOptions): UpdateCheckResult 
 
   // Update cache
   const hasUpdate = compareVersions(latestVersion, currentVersion) > 0;
+  const existingInstalledVersion = cache?.installedVersion ?? null;
   writeCache({
     latestVersion,
     lastChecked: Date.now(),
     checkedVersion: currentVersion,
-    // Null means "newer version known but not yet applied".
-    // When we're already on the latest version, record it so bootstrap can fast-path.
-    installedVersion: hasUpdate ? null : currentVersion,
+    // installedVersion is set only after a successful CLI install + skill sync.
+    installedVersion: hasUpdate ? null : existingInstalledVersion,
   });
 
   result.latestVersion = latestVersion;

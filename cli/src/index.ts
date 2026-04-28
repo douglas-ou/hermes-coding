@@ -41,6 +41,8 @@ registerProgressCommands(program, workspaceDir);
 // because that command performs its own version lookup and should not query npm twice.
 const isUpdateCheckCommand =
   process.argv.includes('update') && process.argv.includes('--check');
+const isAutoUpdateCommand =
+  process.argv.includes('update') && process.argv.includes('--auto');
 
 if (process.env.HERMES_CODING_AUTO_UPDATE === '1') {
   const result = checkForUpdates({
@@ -51,13 +53,13 @@ if (process.env.HERMES_CODING_AUTO_UPDATE === '1') {
   if (result.hasUpdate && result.latestVersion) {
     console.error(chalk.dim(`Update available: ${version} -> ${result.latestVersion}`));
   }
-} else if (!isUpdateCheckCommand) {
+} else if (!isUpdateCheckCommand && !isAutoUpdateCommand) {
   checkAndNotify({
     packageName: name,
     currentVersion: version,
   });
 } else {
-  // Skip redundant pre-check for `hermes-coding update --check`.
+  // Skip redundant pre-check for `hermes-coding update --check` and `--auto`.
 }
 
 // Parse command line arguments

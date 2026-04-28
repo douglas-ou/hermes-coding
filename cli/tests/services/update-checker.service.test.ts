@@ -157,7 +157,7 @@ describe('update-checker.service', () => {
       expect(result.latestVersion).toBe('1.0.0');
 
       const cache = JSON.parse(readFileSync(getCacheFilePath(), 'utf-8'));
-      expect(cache.installedVersion).toBe('1.0.0');
+      expect(cache.installedVersion).toBeNull();
     });
 
     it('should handle npm command failure gracefully', () => {

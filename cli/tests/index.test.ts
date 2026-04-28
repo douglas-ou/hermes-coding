@@ -151,4 +151,32 @@ describe('index.ts - CLI entry point', () => {
     expect(checkAndNotify).not.toHaveBeenCalled();
     expect(checkForUpdates).not.toHaveBeenCalled();
   });
+
+  it('should skip global pre-check for `update --auto`', async () => {
+    process.argv = ['node', 'dist/index.js', 'update', '--auto'];
+
+    const checkAndNotify = vi.fn();
+    const checkForUpdates = vi.fn();
+
+    vi.doMock('../src/services/update-checker.service', () => ({
+      checkAndNotify,
+      checkForUpdates,
+    }));
+    vi.doMock('commander', async () => {
+      const actual = await vi.importActual<typeof import('commander')>('commander');
+      return {
+        ...actual,
+        Command: class extends actual.Command {
+          parse() {
+            return this;
+          }
+        },
+      };
+    });
+
+    await import('../src/index');
+
+    expect(checkAndNotify).not.toHaveBeenCalled();
+    expect(checkForUpdates).not.toHaveBeenCalled();
+  });
 });

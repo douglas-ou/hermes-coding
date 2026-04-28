@@ -38,6 +38,24 @@ interface AutoUpdateOptions {
   targetVersion?: string;
 }
 
+function finalizeUpdatedCLI(
+  result: UpdateResult,
+  workspaceDir: string
+): void {
+  const syncResult = syncSkills(workspaceDir);
+  result.skills = {
+    synced: true,
+    target: syncResult.target,
+    totalFiles: syncResult.totalFiles,
+  };
+
+  const installedVersion = getInstalledVersion() || result.cli.newVersion;
+  if (installedVersion) {
+    result.cli.newVersion = installedVersion;
+    writeInstalledVersion(installedVersion);
+  }
+}
+
 function askConfirmation(question: string): Promise<boolean> {
   return new Promise((resolve) => {
     const rl = createInterface({
@@ -178,17 +196,9 @@ function handleAutoUpdate(options: AutoUpdateOptions): void {
   result.cli.updated = !cliAlreadyCurrent;
   result.cli.newVersion = cliResult.newVersion;
 
-  // Sync skills after successful CLI update
-  let skillsSynced = false;
   try {
     const workspaceDir = process.env.HERMES_CODING_WORKSPACE || process.cwd();
-    const syncResult = syncSkills(workspaceDir);
-    result.skills = {
-      synced: true,
-      target: syncResult.target,
-      totalFiles: syncResult.totalFiles,
-    };
-    skillsSynced = true;
+    finalizeUpdatedCLI(result, workspaceDir);
   } catch (skillError) {
     result.skills = {
       synced: false,
@@ -196,12 +206,7 @@ function handleAutoUpdate(options: AutoUpdateOptions): void {
     };
   }
 
-  // Only record installed version if both CLI update AND skills sync succeeded.
-  // If skills sync failed, don't mark as complete so bash will retry next time.
-  if (skillsSynced) {
-    if (cliResult.newVersion) {
-      writeInstalledVersion(cliResult.newVersion);
-    }
+  if (result.skills?.synced) {
     outputResponse(successResponse(result, { operation: 'update' }), !!options.json);
     process.exit(ExitCode.SUCCESS);
     return;
@@ -306,7 +311,22 @@ export function registerUpdateCommand(program: Command): void {
           result.cli.error = cliResult.error;
 
           if (cliResult.success) {
-            console.log(chalk.green(`\n✓ CLI updated to v${cliResult.newVersion}\n`));
+            try {
+              const workspaceDir = process.env.HERMES_CODING_WORKSPACE || process.cwd();
+              finalizeUpdatedCLI(result, workspaceDir);
+            } catch (skillError) {
+              result.skills = {
+                synced: false,
+                error: skillError instanceof Error ? skillError.message : String(skillError),
+              };
+            }
+
+            console.log(chalk.green(`\n✓ CLI updated to v${result.cli.newVersion || cliResult.newVersion}\n`));
+            if (result.skills?.synced) {
+              console.log(chalk.dim('Bundled skills synced.\n'));
+            } else if (result.skills?.error) {
+              console.log(chalk.yellow(`\n⚠️ Skills sync failed: ${result.skills.error}\n`));
+            }
           } else {
             console.log(chalk.yellow(`\n⚠️ CLI update failed: ${cliResult.error}\n`));
           }
