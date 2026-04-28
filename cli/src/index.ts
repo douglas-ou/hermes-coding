@@ -37,16 +37,23 @@ registerProgressCommands(program, workspaceDir);
 // Shows notification if update available (cached check, 24 hour interval)
 // Skip if NO_UPDATE_NOTIFIER is set or in CI environment
 // In auto-update mode (triggered by bootstrap), suppress the banner
+// Also skip the global pre-check for the dedicated `update --check` command
+// because that command performs its own version lookup and should not query npm twice.
+const isUpdateCheckCommand =
+  process.argv.includes('update') && process.argv.includes('--check');
+
 if (process.env.HERMES_CODING_AUTO_UPDATE === '1') {
   const result = checkForUpdates({ packageName: name, currentVersion: version });
   if (result.hasUpdate && result.latestVersion) {
     console.error(chalk.dim(`Update available: ${version} -> ${result.latestVersion}`));
   }
-} else {
+} else if (!isUpdateCheckCommand) {
   checkAndNotify({
     packageName: name,
     currentVersion: version,
   });
+} else {
+  // Skip redundant pre-check for `hermes-coding update --check`.
 }
 
 // Parse command line arguments

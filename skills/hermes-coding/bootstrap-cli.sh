@@ -200,13 +200,16 @@ check_and_auto_update() {
     installed_cache_version=$(read_cache_field "installedVersion")
 
     # Already installed the latest? Fast path done.
-    if [ -n "$installed_cache_version" ] && [ "$installed_cache_version" = "$latest_version" ]; then
+    if [ -n "$latest_version" ] \
+      && [ -n "$installed_cache_version" ] \
+      && [ "$installed_cache_version" = "$latest_version" ] \
+      && [ "$installed_version" = "$latest_version" ]; then
       return 0
     fi
   else
     # Cache expired: ask CLI to check and refresh cache
     local check_output
-    check_output=$(hermes-coding update --check --json 2>/dev/null) || return 0
+    check_output=$(NO_UPDATE_NOTIFIER=1 hermes-coding update --check --json 2>/dev/null) || return 0
     latest_version=$(echo "$check_output" | grep -o '"latestVersion"[[:space:]]*:[[:space:]]*"[^"]*"' | head -1 | sed 's/.*:.*"\(.*\)"/\1/')
 
     # No update needed

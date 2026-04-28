@@ -11,7 +11,7 @@ import { createInterface } from 'readline';
 import chalk from 'chalk';
 import { ExitCode } from '../core/exit-codes';
 import { handleError, Errors } from '../core/error-handler';
-import { successResponse, outputResponse } from '../core/response-wrapper';
+import { errorResponse, successResponse, outputResponse } from '../core/response-wrapper';
 import { writeInstalledVersion } from '../services/update-checker.service';
 import { syncSkills } from '../services/skill-sync.service';
 import { version as currentVersion } from '../../package.json';
@@ -61,6 +61,31 @@ function getLatestVersion(): string | null {
   }
 }
 
+function getInstalledVersion(): string | null {
+  try {
+    const result = execSync(`npm list -g ${PACKAGE_NAME} --depth=0 --json`, {
+      encoding: 'utf-8',
+      timeout: 30000,
+      stdio: ['pipe', 'pipe', 'pipe'],
+    });
+    const parsed = JSON.parse(result) as {
+      dependencies?: Record<string, { version?: string }>;
+    };
+    return parsed.dependencies?.[PACKAGE_NAME]?.version?.trim() || null;
+  } catch {
+    try {
+      const result = execSync(`${PACKAGE_NAME} --version`, {
+        encoding: 'utf-8',
+        timeout: 30000,
+        stdio: ['pipe', 'pipe', 'pipe'],
+      });
+      return result.trim().replace(/^v/, '');
+    } catch {
+      return null;
+    }
+  }
+}
+
 function updateCLI(silent: boolean = false): { success: boolean; newVersion?: string; error?: string } {
   try {
     if (!silent) {
@@ -72,7 +97,7 @@ function updateCLI(silent: boolean = false): { success: boolean; newVersion?: st
       timeout: 120000,
     });
 
-    const newVersion = getLatestVersion();
+    const newVersion = getInstalledVersion();
     return { success: true, newVersion: newVersion || undefined };
   } catch (error) {
     try {
@@ -80,7 +105,7 @@ function updateCLI(silent: boolean = false): { success: boolean; newVersion?: st
         stdio: silent ? 'pipe' : 'inherit',
         timeout: 120000,
       });
-      const newVersion = getLatestVersion();
+      const newVersion = getInstalledVersion();
       return { success: true, newVersion: newVersion || undefined };
     } catch (npxError) {
       return {
@@ -112,10 +137,21 @@ function handleAutoUpdate(options: { json?: boolean }): void {
 
   if (!cliResult.success) {
     result.cli.error = cliResult.error;
-    if (options.json) {
-      outputResponse(successResponse(result, { operation: 'update' }), true);
-    }
+    outputResponse(
+      errorResponse(
+        'AUTO_UPDATE_FAILED',
+        cliResult.error || 'Failed to update hermes-coding CLI',
+        {
+          details: result,
+          recoverable: true,
+          suggestedAction: 'Check npm/network access and retry the update.',
+          metadata: { operation: 'update' },
+        }
+      ),
+      !!options.json
+    );
     process.exit(ExitCode.GENERAL_ERROR);
+    return;
   }
 
   result.cli.updated = true;
@@ -142,16 +178,28 @@ function handleAutoUpdate(options: { json?: boolean }): void {
   // Only record installed version if both CLI update AND skills sync succeeded.
   // If skills sync failed, don't mark as complete so bash will retry next time.
   if (skillsSynced) {
-    writeInstalledVersion(cliResult.newVersion || 'unknown');
+    if (cliResult.newVersion) {
+      writeInstalledVersion(cliResult.newVersion);
+    }
+    outputResponse(successResponse(result, { operation: 'update' }), !!options.json);
+    process.exit(ExitCode.SUCCESS);
+    return;
   }
 
-  const response = successResponse(result, { operation: 'update' });
-
-  if (options.json) {
-    outputResponse(response, true);
-  }
-
-  process.exit(skillsSynced ? ExitCode.SUCCESS : ExitCode.GENERAL_ERROR);
+  outputResponse(
+    errorResponse(
+      'SKILL_SYNC_FAILED',
+      'CLI updated but failed to sync bundled skills',
+      {
+        details: result,
+        recoverable: true,
+        suggestedAction: 'Retry the update or run `hermes-coding init` in the workspace.',
+        metadata: { operation: 'update' },
+      }
+    ),
+    !!options.json
+  );
+  process.exit(ExitCode.GENERAL_ERROR);
 }
 
 export function registerUpdateCommand(program: Command): void {

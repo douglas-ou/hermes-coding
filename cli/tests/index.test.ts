@@ -2,14 +2,18 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
 describe('index.ts - CLI entry point', () => {
   let originalArgv: string[];
+  let originalEnv: NodeJS.ProcessEnv;
 
   beforeEach(() => {
     originalArgv = process.argv;
+    originalEnv = { ...process.env };
   });
 
   afterEach(() => {
     process.argv = originalArgv;
+    process.env = originalEnv;
     vi.resetModules();
+    vi.restoreAllMocks();
   });
 
   it('should be importable without errors', () => {
@@ -114,5 +118,37 @@ describe('index.ts - CLI entry point', () => {
     expect(program.name).toBeDefined();
     expect(program.description).toBeDefined();
     expect(program.version).toBeDefined();
+  });
+
+  it('should skip global pre-check for `update --check`', async () => {
+    process.argv = ['node', 'dist/index.js', 'update', '--check', '--json'];
+
+    const checkAndNotify = vi.fn();
+    const checkForUpdates = vi.fn().mockReturnValue({
+      hasUpdate: false,
+      currentVersion: '0.1.2',
+      fromCache: true,
+    });
+
+    vi.doMock('../src/services/update-checker.service', () => ({
+      checkAndNotify,
+      checkForUpdates,
+    }));
+    vi.doMock('commander', async () => {
+      const actual = await vi.importActual<typeof import('commander')>('commander');
+      return {
+        ...actual,
+        Command: class extends actual.Command {
+          parse() {
+            return this;
+          }
+        },
+      };
+    });
+
+    await import('../src/index');
+
+    expect(checkAndNotify).not.toHaveBeenCalled();
+    expect(checkForUpdates).not.toHaveBeenCalled();
   });
 });

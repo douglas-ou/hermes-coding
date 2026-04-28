@@ -7,6 +7,14 @@ vi.mock('child_process', () => ({
   execSync: vi.fn(),
 }));
 
+vi.mock('../../src/services/update-checker.service', () => ({
+  writeInstalledVersion: vi.fn(),
+}));
+
+vi.mock('../../src/services/skill-sync.service', () => ({
+  syncSkills: vi.fn(),
+}));
+
 // Mock readline for askConfirmation
 vi.mock('readline', () => ({
   createInterface: vi.fn().mockReturnValue({
@@ -225,6 +233,81 @@ describe('Update Command Integration', () => {
 
       const allLogs = consoleLogSpy.mock.calls.flat().join('');
       expect(allLogs).toContain('"cli"');
+    });
+
+    it('should return success JSON for --auto when update and skills sync succeed', async () => {
+      const { execSync } = await import('child_process');
+      const { syncSkills } = await import('../../src/services/skill-sync.service');
+      const { writeInstalledVersion } = await import('../../src/services/update-checker.service');
+
+      vi.mocked(execSync).mockImplementation((cmd: any) => {
+        const cmdStr = String(cmd);
+        if (cmdStr.includes('npm list -g')) {
+          return JSON.stringify({
+            dependencies: {
+              'hermes-coding': { version: '99.0.0' },
+            },
+          });
+        }
+        return '';
+      });
+      vi.mocked(syncSkills).mockReturnValue({
+        target: '/tmp/ws/.claude/skills',
+        skills: { 'hermes-coding': ['SKILL.md'] },
+        totalFiles: 1,
+      });
+
+      await program.parseAsync(['node', 'test', 'update', '--auto', '--json']);
+
+      const allLogs = consoleLogSpy.mock.calls.flat().join('');
+      expect(allLogs).toContain('"success": true');
+      expect(allLogs).toContain('"synced": true');
+      expect(writeInstalledVersion).toHaveBeenCalledWith('99.0.0');
+      expect(processExitSpy).toHaveBeenLastCalledWith(0);
+    });
+
+    it('should return error JSON for --auto when CLI update fails', async () => {
+      const { execSync } = await import('child_process');
+
+      vi.mocked(execSync).mockImplementation(() => {
+        throw new Error('install failed');
+      });
+
+      await program.parseAsync(['node', 'test', 'update', '--auto', '--json']);
+
+      const allLogs = consoleLogSpy.mock.calls.flat().join('');
+      expect(allLogs).toContain('"success": false');
+      expect(allLogs).toContain('AUTO_UPDATE_FAILED');
+      expect(processExitSpy).toHaveBeenLastCalledWith(1);
+    });
+
+    it('should return error JSON for --auto when skills sync fails', async () => {
+      const { execSync } = await import('child_process');
+      const { syncSkills } = await import('../../src/services/skill-sync.service');
+      const { writeInstalledVersion } = await import('../../src/services/update-checker.service');
+
+      vi.mocked(execSync).mockImplementation((cmd: any) => {
+        const cmdStr = String(cmd);
+        if (cmdStr.includes('npm list -g')) {
+          return JSON.stringify({
+            dependencies: {
+              'hermes-coding': { version: '99.0.0' },
+            },
+          });
+        }
+        return '';
+      });
+      vi.mocked(syncSkills).mockImplementation(() => {
+        throw new Error('sync failed');
+      });
+
+      await program.parseAsync(['node', 'test', 'update', '--auto', '--json']);
+
+      const allLogs = consoleLogSpy.mock.calls.flat().join('');
+      expect(allLogs).toContain('"success": false');
+      expect(allLogs).toContain('SKILL_SYNC_FAILED');
+      expect(writeInstalledVersion).not.toHaveBeenCalled();
+      expect(processExitSpy).toHaveBeenLastCalledWith(1);
     });
   });
 
