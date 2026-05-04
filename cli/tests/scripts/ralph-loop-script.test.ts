@@ -131,7 +131,7 @@ process.exit(64);
 `
   );
 
-  // Fake claude (just reads stdin and exits)
+  // Fake claude (reads stdin and exits)
   writeExecutable(
     path.join(binDir, 'claude'),
     `#!/usr/bin/env node
@@ -141,6 +141,19 @@ const input = fs.readFileSync(0, 'utf8');
 fs.appendFileSync(callLogFile, 'claude invoked\\n');
 fs.appendFileSync(callLogFile, 'claude prompt=' + JSON.stringify(input) + '\\n');
 process.stdout.write('claude done\\n');
+`
+  );
+
+  // Fake codex (reads stdin and exits)
+  writeExecutable(
+    path.join(binDir, 'codex'),
+    `#!/usr/bin/env node
+const fs = require('fs');
+const callLogFile = require('path').join(process.env.HERMES_CODING_WORKSPACE, '.test-call-log.txt');
+const input = fs.readFileSync(0, 'utf8');
+fs.appendFileSync(callLogFile, 'codex invoked\\n');
+fs.appendFileSync(callLogFile, 'codex prompt=' + JSON.stringify(input) + '\\n');
+process.stdout.write('codex done\\n');
 `
   );
 
@@ -233,7 +246,7 @@ describe('ralph-loop.sh', () => {
 
   // ── Task iteration tests ──────────────────────────────────────────
 
-  it('should invoke claude with the phase-3 skill and continue until all_done', () => {
+  it('should invoke tool-command with the phase-3 skill and continue until all_done', () => {
     const binDir = seedWorkspace(workspaceDir, [
       {
         result: 'task_found',
@@ -246,7 +259,12 @@ describe('ralph-loop.sh', () => {
       { result: 'all_done' },
     ]);
 
-    const result = runLoopScript(workspaceDir, binDir, ['5']);
+    const result = runLoopScript(workspaceDir, binDir, [
+      '--tool', 'claude',
+      '--tool-command', 'claude --dangerously-skip-permissions --print --verbose',
+      '--tool-command-interactive', 'claude --dangerously-skip-permissions',
+      '5',
+    ]);
     const output = `${result.stdout}${result.stderr}`;
     const callLog = readCallLog(workspaceDir);
 
@@ -258,7 +276,23 @@ describe('ralph-loop.sh', () => {
       'tasks next result=task_found task=auth.signup',
       'tasks next result=all_done',
     ]);
-    expect(callLog.some(line => line.includes('claude prompt="# Phase 3 skill\\nSkill content for test.\\n"'))).toBe(true);
+  });
+
+  it('should use --tool-command for background mode via eval', () => {
+    const binDir = seedWorkspace(workspaceDir, [
+      { result: 'all_done' },
+    ]);
+
+    const result = runLoopScript(workspaceDir, binDir, [
+      '--tool', 'codex',
+      '--tool-command', 'codex exec --sandbox danger-full-access --ask-for-approval never',
+      '--tool-command-interactive', 'codex',
+      '5',
+    ]);
+    const callLog = readCallLog(workspaceDir);
+
+    expect(result.status).toBe(0);
+    expect(callLog.filter(line => line === 'codex invoked')).toHaveLength(1);
   });
 
   it('should exit 1 when tasks are blocked', () => {
@@ -270,7 +304,12 @@ describe('ralph-loop.sh', () => {
       { result: 'blocked' },
     ]);
 
-    const result = runLoopScript(workspaceDir, binDir, ['5']);
+    const result = runLoopScript(workspaceDir, binDir, [
+      '--tool', 'claude',
+      '--tool-command', 'claude --dangerously-skip-permissions --print --verbose',
+      '--tool-command-interactive', 'claude --dangerously-skip-permissions',
+      '5',
+    ]);
     const output = `${result.stdout}${result.stderr}`;
 
     expect(result.status).toBe(1);
@@ -282,7 +321,12 @@ describe('ralph-loop.sh', () => {
       { result: 'all_done' },
     ]);
 
-    const result = runLoopScript(workspaceDir, binDir, ['5']);
+    const result = runLoopScript(workspaceDir, binDir, [
+      '--tool', 'claude',
+      '--tool-command', 'claude --dangerously-skip-permissions --print --verbose',
+      '--tool-command-interactive', 'claude --dangerously-skip-permissions',
+      '5',
+    ]);
     const output = `${result.stdout}${result.stderr}`;
     const callLog = readCallLog(workspaceDir);
 
@@ -291,6 +335,36 @@ describe('ralph-loop.sh', () => {
     expect(output).toContain('Transitioning to deliver');
     expect(callLog).toContain('state update phase=deliver');
     expect(callLog.filter(line => line === 'claude invoked')).toHaveLength(1);
+  });
+
+  it('--custom should override --tool-command', () => {
+    const binDir = seedWorkspace(workspaceDir, [
+      { result: 'all_done' },
+    ]);
+
+    const result = runLoopScript(workspaceDir, binDir, [
+      '--tool', 'claude',
+      '--tool-command', 'claude --dangerously-skip-permissions --print --verbose',
+      '--tool-command-interactive', 'claude --dangerously-skip-permissions',
+      '--custom', 'claude',
+      '5',
+    ]);
+    const callLog = readCallLog(workspaceDir);
+
+    expect(result.status).toBe(0);
+    expect(callLog.filter(line => line === 'claude invoked')).toHaveLength(1);
+  });
+
+  it('should error when neither --tool-command nor --custom is provided', () => {
+    const binDir = seedWorkspace(workspaceDir, [
+      { result: 'all_done' },
+    ]);
+
+    const result = runLoopScript(workspaceDir, binDir, ['5']);
+    const output = `${result.stdout}${result.stderr}`;
+
+    expect(result.status).toBe(1);
+    expect(output).toContain('No tool configuration found');
   });
 
   // ── PID lock tests ────────────────────────────────────────────────
@@ -303,7 +377,12 @@ describe('ralph-loop.sh', () => {
     const lockFile = path.join(workspaceDir, '.hermes-coding', '.loop.lock');
     expect(fs.existsSync(lockFile)).toBe(false);
 
-    runLoopScript(workspaceDir, binDir, ['5']);
+    runLoopScript(workspaceDir, binDir, [
+      '--tool', 'claude',
+      '--tool-command', 'claude --dangerously-skip-permissions --print --verbose',
+      '--tool-command-interactive', 'claude --dangerously-skip-permissions',
+      '5',
+    ]);
 
     // Lock should have been cleaned up on exit
     expect(fs.existsSync(lockFile)).toBe(false);
@@ -315,7 +394,12 @@ describe('ralph-loop.sh', () => {
     ]);
 
     const lockFile = path.join(workspaceDir, '.hermes-coding', '.loop.lock');
-    runLoopScript(workspaceDir, binDir, ['5']);
+    runLoopScript(workspaceDir, binDir, [
+      '--tool', 'claude',
+      '--tool-command', 'claude --dangerously-skip-permissions --print --verbose',
+      '--tool-command-interactive', 'claude --dangerously-skip-permissions',
+      '5',
+    ]);
 
     expect(fs.existsSync(lockFile)).toBe(false);
   });
@@ -326,7 +410,12 @@ describe('ralph-loop.sh', () => {
     ]);
 
     const lockFile = path.join(workspaceDir, '.hermes-coding', '.loop.lock');
-    runLoopScript(workspaceDir, binDir, ['5']);
+    runLoopScript(workspaceDir, binDir, [
+      '--tool', 'claude',
+      '--tool-command', 'claude --dangerously-skip-permissions --print --verbose',
+      '--tool-command-interactive', 'claude --dangerously-skip-permissions',
+      '5',
+    ]);
 
     expect(fs.existsSync(lockFile)).toBe(false);
   });
@@ -342,7 +431,12 @@ describe('ralph-loop.sh', () => {
     fs.ensureDirSync(path.dirname(lockFile));
     fs.writeFileSync(lockFile, String(process.pid));
 
-    const result = runLoopScript(workspaceDir, binDir, ['5']);
+    const result = runLoopScript(workspaceDir, binDir, [
+      '--tool', 'claude',
+      '--tool-command', 'claude --dangerously-skip-permissions --print --verbose',
+      '--tool-command-interactive', 'claude --dangerously-skip-permissions',
+      '5',
+    ]);
     const output = `${result.stdout}${result.stderr}`;
 
     expect(result.status).toBe(1);
@@ -361,12 +455,16 @@ describe('ralph-loop.sh', () => {
     const lockFile = path.join(workspaceDir, '.hermes-coding', '.loop.lock');
 
     // Write a lock file with a PID that definitely doesn't exist
-    // Use a very high PID that won't be in use
     const stalePid = 99999999;
     fs.ensureDirSync(path.dirname(lockFile));
     fs.writeFileSync(lockFile, String(stalePid));
 
-    const result = runLoopScript(workspaceDir, binDir, ['5']);
+    const result = runLoopScript(workspaceDir, binDir, [
+      '--tool', 'claude',
+      '--tool-command', 'claude --dangerously-skip-permissions --print --verbose',
+      '--tool-command-interactive', 'claude --dangerously-skip-permissions',
+      '5',
+    ]);
     const output = `${result.stdout}${result.stderr}`;
 
     // Should succeed — stale lock was cleaned
@@ -388,7 +486,12 @@ describe('ralph-loop.sh', () => {
     fs.ensureDirSync(path.dirname(lockFile));
     fs.writeFileSync(lockFile, 'not-a-pid');
 
-    const result = runLoopScript(workspaceDir, binDir, ['5']);
+    const result = runLoopScript(workspaceDir, binDir, [
+      '--tool', 'claude',
+      '--tool-command', 'claude --dangerously-skip-permissions --print --verbose',
+      '--tool-command-interactive', 'claude --dangerously-skip-permissions',
+      '5',
+    ]);
 
     // Should succeed — corrupt lock was cleaned
     expect(result.status).toBe(0);

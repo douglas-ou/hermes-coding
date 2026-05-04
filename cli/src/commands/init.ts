@@ -1,70 +1,116 @@
 /**
- * Init Command - Copy all bundled skills into the current project
+ * Init Command - Bootstrap hermes-coding in the current project
  *
- * Copies every subdirectory under skills/ (hermes-coding, baseline-fixer, etc.)
- * into <cwd>/.claude/skills/ so Claude Code discovers them locally.
+ * Copies bundled skills to .claude/skills/ and .agents/skills/,
+ * writes config.json with the user's tool selection, and
+ * optionally creates a pre-commit hook.
  */
 
 import { Command } from 'commander';
 import chalk from 'chalk';
+import * as clack from '@clack/prompts';
 import { ExitCode } from '../core/exit-codes';
 import { handleError, Errors } from '../core/error-handler';
-import { successResponse, outputResponse } from '../core/response-wrapper';
 import { createHookService } from './service-factory';
 import { syncSkills } from '../services/skill-sync.service';
+import { writeConfig, resolveToolCommand, HermesConfig } from '../services/config-service';
+
+const TOOL_OPTIONS = [
+  { value: 'claude', label: 'Claude Code', hint: 'CLI by Anthropic' },
+  { value: 'amp', label: 'Amp', hint: 'CLI by Sourcegraph' },
+  { value: 'codex', label: 'Codex', hint: 'CLI by OpenAI' },
+];
 
 export function registerInitCommand(program: Command): void {
   program
     .command('init')
-    .description('Copy hermes-coding skills into .claude/ for the current project')
-    .option('--json', 'Output as JSON')
+    .description('Bootstrap hermes-coding in the current project')
+    .option('--tool <tool>', 'Non-interactive: specify tool (claude, amp, codex)')
     .option('--no-hook', 'Skip pre-commit hook creation')
     .action(async (options) => {
       try {
-        const { target, skills, totalFiles } = syncSkills(process.cwd());
+        // ── 1. Determine tool ──────────────────────────────────────────
+        let tool: string;
 
-        const result: Record<string, any> = {
-          target,
-          skills,
-          totalFiles,
+        if (options.tool) {
+          // Non-interactive mode via --tool flag
+          const resolved = resolveToolCommand(options.tool);
+          if (!resolved) {
+            console.error(chalk.red(`\n✗ Unknown tool '${options.tool}'. Available: claude, amp, codex\n`));
+            process.exit(ExitCode.INVALID_INPUT);
+            return;
+          }
+          tool = options.tool;
+        } else {
+          // Interactive selection
+          const selection = await clack.select({
+            message: 'Select your coding tool:',
+            options: TOOL_OPTIONS,
+            initialValue: 'claude',
+          });
+
+          // clack signals cancel with Symbol('clack:cancel')
+          if (clack.isCancel(selection)) {
+            console.log(chalk.dim('\nCancelled.\n'));
+            process.exit(ExitCode.SUCCESS);
+            return;
+          }
+
+          tool = selection as string;
+        }
+
+        // ── 2. Resolve commands and write config ───────────────────────
+        const commands = resolveToolCommand(tool)!;
+        const config: HermesConfig = {
+          tool,
+          toolCommand: commands.command,
+          toolCommandInteractive: commands.interactive,
         };
+        writeConfig(process.cwd(), config);
 
-        // Pre-commit hook creation (best-effort)
+        // ── 3. Sync skills ─────────────────────────────────────────────
+        const { target, agentsTarget, skills } = syncSkills(process.cwd());
+
+        // ── 4. Pre-commit hook (best-effort) ───────────────────────────
+        let hookCreated = false;
+        let hookSkipped = false;
+        let hookReason = '';
+
         if (options.hook !== false) {
           try {
             const hookService = createHookService(process.cwd());
             const hookResult = await hookService.createPreCommitHook(process.cwd());
-            result.hook = hookResult;
+            hookCreated = hookResult.created;
+            hookSkipped = !hookResult.created;
+            hookReason = hookResult.reason || '';
           } catch (hookError) {
-            // Best-effort: never fail init due to hook issues
-            result.hook = { created: false, reason: String(hookError) };
+            hookSkipped = true;
+            hookReason = String(hookError);
           }
         }
 
-        if (options.json) {
-          const response = successResponse(result, { operation: 'init' });
-          outputResponse(response, true);
-        } else {
-          console.log(chalk.green(`\n✓ hermes-coding skills installed\n`));
-          console.log(chalk.dim(`  Target: ${target}`));
-          for (const [name, files] of Object.entries(skills)) {
-            console.log(chalk.dim(`  ${name}/: ${files.join(', ')}`));
-          }
+        // ── 5. Output ──────────────────────────────────────────────────
+        console.log(chalk.green(`\n✓ Workspace initialized (.hermes-coding/)`));
+        console.log(chalk.dim(`  Tool:   ${tool}`));
+        console.log(chalk.green(`✓ Config saved (.hermes-coding/config.json)`));
 
-          if (result.hook) {
-            if (result.hook.created) {
-              console.log(chalk.green(`  Hook:   pre-commit created (${result.hook.testCommand})`));
-            } else {
-              console.log(chalk.dim(`  Hook:   skipped (${result.hook.reason})`));
-            }
-          }
-
-          console.log();
+        for (const [name, files] of Object.entries(skills)) {
+          const label = name === 'hermes-coding' ? `Skills synced to .claude/skills/${name}/` : `  ${name}/`;
+          console.log(chalk.green(`✓ Skills synced to .claude/skills/${name}/`));
         }
+        console.log(chalk.green(`✓ Skills synced to .agents/skills/hermes-coding/`));
+
+        if (hookCreated) {
+          console.log(chalk.green(`✓ Pre-commit hook installed`));
+        } else if (hookSkipped) {
+          console.log(chalk.dim(`  Hook: skipped (${hookReason})`));
+        }
+
+        console.log();
 
         process.exit(ExitCode.SUCCESS);
       } catch (error) {
-        handleError(Errors.fileSystemError('Init failed', error), options.json);
+        handleError(Errors.fileSystemError('Init failed', error));
       }
     });
 }

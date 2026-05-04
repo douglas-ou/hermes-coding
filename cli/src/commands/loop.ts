@@ -2,9 +2,11 @@ import { existsSync } from 'fs';
 import * as path from 'path';
 import { spawnSync } from 'child_process';
 import { Command } from 'commander';
+import chalk from 'chalk';
 import { ExitCode } from '../core/exit-codes';
 import { createError, Errors, handleError } from '../core/error-handler';
 import { createStateService } from './service-factory';
+import { readConfig, resolveToolCommand } from '../services/config-service';
 
 function resolveLoopScriptPath(): string {
   return path.resolve(__dirname, '..', '..', 'scripts', 'ralph-loop.sh');
@@ -14,15 +16,15 @@ export function registerLoopCommand(program: Command, workspaceDir: string): voi
   program
     .command('loop')
     .description('Run the Phase 3 implement loop from the current terminal')
-    .option('--tool <tool>', 'AI tool to use (claude or amp)', 'claude')
-    .option('--custom <command>', 'Custom tool command to run (e.g. "codex --approval-mode full-auto")')
+    .option('--tool <tool>', 'Override tool from config (claude, amp, codex)')
+    .option('--custom <command>', 'Custom tool command (overrides everything)')
     .option('--visible', 'Open a visible terminal window per iteration')
     .argument('[max-iterations]', 'Maximum number of iterations')
     .addHelpText(
       'after',
       '\nRun this after /hermes-coding or /hermes-coding resume has advanced the workflow to implement.'
     )
-    .action(async (maxIterations: string | undefined, options: { tool: string; visible: boolean; custom?: string }) => {
+    .action(async (maxIterations: string | undefined, options: { tool?: string; visible: boolean; custom?: string }) => {
       try {
         const stateService = createStateService(workspaceDir);
         const state = await stateService.getState();
@@ -55,7 +57,48 @@ export function registerLoopCommand(program: Command, workspaceDir: string): voi
           return;
         }
 
-        const scriptArgs: string[] = [loopScriptPath, '--tool', options.tool];
+        // ── Resolve tool commands: --custom > --tool > config.json ──
+        let toolCommand: string;
+        let toolCommandInteractive: string;
+        let toolLabel: string;
+
+        if (options.custom) {
+          // Highest priority: explicit custom command
+          toolCommand = options.custom;
+          toolCommandInteractive = options.custom;
+          toolLabel = 'custom';
+        } else if (options.tool) {
+          // Second: --tool flag → lookup from TOOL_COMMAND_MAP
+          const resolved = resolveToolCommand(options.tool);
+          if (!resolved) {
+            console.error(chalk.red(`\n✗ Unknown tool '${options.tool}'. Available: claude, amp, codex\n`));
+            process.exit(ExitCode.INVALID_INPUT);
+            return;
+          }
+          toolCommand = resolved.command;
+          toolCommandInteractive = resolved.interactive;
+          toolLabel = options.tool;
+        } else {
+          // Third: read from config.json
+          const config = readConfig(workspaceDir);
+          if (!config) {
+            console.error(chalk.red(`\n✗ No tool configuration found.`));
+            console.error(chalk.dim(`  Run 'hermes-coding init' to select a tool first.\n`));
+            process.exit(ExitCode.INVALID_INPUT);
+            return;
+          }
+          toolCommand = config.toolCommand;
+          toolCommandInteractive = config.toolCommandInteractive;
+          toolLabel = config.tool;
+        }
+
+        // ── Build script args ──
+        const scriptArgs: string[] = [
+          loopScriptPath,
+          '--tool', toolLabel,
+          '--tool-command', toolCommand,
+          '--tool-command-interactive', toolCommandInteractive,
+        ];
         if (options.custom) scriptArgs.push('--custom', options.custom);
         if (options.visible) scriptArgs.push('--visible');
         if (maxIterations) scriptArgs.push(maxIterations);

@@ -1,8 +1,8 @@
 /**
  * Skill Sync Service
  *
- * Copies bundled skills from the npm package to .claude/skills/
- * in the target workspace directory.
+ * Copies bundled skills from the npm package to both
+ * .claude/skills/ and .agents/skills/ in the target workspace.
  *
  * Extracted from init.ts for reuse by the auto-update flow.
  */
@@ -14,7 +14,10 @@ import * as fs from 'fs-extra';
 const cliRoot = path.resolve(__dirname, '..', '..');
 
 export interface SkillSyncResult {
+  /** .claude/skills/ target */
   target: string;
+  /** .agents/skills/ target */
+  agentsTarget: string;
   skills: Record<string, string[]>;
   totalFiles: number;
 }
@@ -48,16 +51,13 @@ function skipHidden(_src: string, dest: string): boolean {
 }
 
 /**
- * Copy bundled skills to the target workspace's .claude/skills/ directory.
- *
- * @param workspaceDir - Project root where .claude/skills/ will be created
- * @returns SkillSyncResult with copied skill names and file counts
+ * Copy all skill subdirectories to a single target directory.
+ * Returns the skills map and total file count.
  */
-export function syncSkills(workspaceDir: string): SkillSyncResult {
-  const skillsRoot = resolveSkillsRoot();
-  const targetSkillsDir = path.join(workspaceDir, '.claude', 'skills');
-
-  // Enumerate skill subdirectories (hermes-coding, baseline-fixer, ...)
+function copyToTarget(skillsRoot: string, targetDir: string): {
+  skills: Record<string, string[]>;
+  totalFiles: number;
+} {
   const skillNames = fs
     .readdirSync(skillsRoot)
     .filter(
@@ -66,13 +66,12 @@ export function syncSkills(workspaceDir: string): SkillSyncResult {
         fs.statSync(path.join(skillsRoot, name)).isDirectory()
     );
 
-  fs.mkdirpSync(targetSkillsDir);
+  fs.mkdirpSync(targetDir);
 
-  // Copy each skill directory
   const skills: Record<string, string[]> = {};
   for (const skillName of skillNames) {
     const srcDir = path.join(skillsRoot, skillName);
-    const destDir = path.join(targetSkillsDir, skillName);
+    const destDir = path.join(targetDir, skillName);
 
     fs.mkdirpSync(destDir);
     fs.copySync(srcDir, destDir, { overwrite: true, filter: skipHidden });
@@ -87,5 +86,30 @@ export function syncSkills(workspaceDir: string): SkillSyncResult {
     0
   );
 
-  return { target: targetSkillsDir, skills, totalFiles };
+  return { skills, totalFiles };
+}
+
+/**
+ * Copy bundled skills to both .claude/skills/ and .agents/skills/.
+ *
+ * @param workspaceDir - Project root where directories will be created
+ * @returns SkillSyncResult with both targets and copied skill info
+ */
+export function syncSkills(workspaceDir: string): SkillSyncResult {
+  const skillsRoot = resolveSkillsRoot();
+  const targetSkillsDir = path.join(workspaceDir, '.claude', 'skills');
+  const agentsSkillsDir = path.join(workspaceDir, '.agents', 'skills');
+
+  // Copy to .claude/skills/
+  const { skills, totalFiles } = copyToTarget(skillsRoot, targetSkillsDir);
+
+  // Copy identical content to .agents/skills/
+  copyToTarget(skillsRoot, agentsSkillsDir);
+
+  return {
+    target: targetSkillsDir,
+    agentsTarget: agentsSkillsDir,
+    skills,
+    totalFiles,
+  };
 }

@@ -49,6 +49,7 @@
     "url": "https://github.com/douglas-ou/hermes-coding/issues"
   },
   "dependencies": {
+    "@clack/prompts": "^0.9.1",
     "chalk": "^5.3.0",
     "commander": "^11.1.0",
     "fs-extra": "^11.2.0",

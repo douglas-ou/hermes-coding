@@ -1,10 +1,17 @@
 #!/usr/bin/env bash
 #
 # hermes-coding: Phase 3 outer loop controller.
-# Iterates through tasks, spawning a fresh Claude/amp process per task.
+# Iterates through tasks, spawning a fresh AI tool process per task.
 #
 # Run from project root: hermes-coding loop
-# Internal: cli/scripts/ralph-loop.sh [--tool claude|amp] [max_iterations]
+# Internal: cli/scripts/ralph-loop.sh [options] [max_iterations]
+#
+# Options:
+#   --tool <name>                        Tool name for logging (claude/amp/codex)
+#   --tool-command <cmd>                 Full command for background mode
+#   --tool-command-interactive <cmd>     Full command for interactive/visible mode
+#   --custom <cmd>                       Custom command (highest priority)
+#   --visible                            Open visible terminal per iteration
 #
 # Env:
 #   HERMES_CODING_WORKSPACE   Project root (default: $PWD)
@@ -82,17 +89,23 @@ trap 'exit 143' TERM
 # ── Argument parsing ─────────────────────────────────────────────────
 
 TOOL="claude"
+TOOL_COMMAND=""
+TOOL_COMMAND_INTERACTIVE=""
 USER_MAX_ITERATIONS=""
 VISIBLE=0
 CUSTOM_TOOL=""
 
 while [[ $# -gt 0 ]]; do
   case $1 in
-    --tool)     TOOL="$2"; shift 2 ;;
-    --tool=*)   TOOL="${1#*=}"; shift ;;
-    --custom)   CUSTOM_TOOL="$2"; shift 2 ;;
-    --custom=*) CUSTOM_TOOL="${1#*=}"; shift ;;
-    --visible)  VISIBLE=1; shift ;;
+    --tool)                      TOOL="$2"; shift 2 ;;
+    --tool=*)                    TOOL="${1#*=}"; shift ;;
+    --tool-command)              TOOL_COMMAND="$2"; shift 2 ;;
+    --tool-command=*)            TOOL_COMMAND="${1#*=}"; shift ;;
+    --tool-command-interactive)  TOOL_COMMAND_INTERACTIVE="$2"; shift 2 ;;
+    --tool-command-interactive=*) TOOL_COMMAND_INTERACTIVE="${1#*=}"; shift ;;
+    --custom)                    CUSTOM_TOOL="$2"; shift 2 ;;
+    --custom=*)                  CUSTOM_TOOL="${1#*=}"; shift ;;
+    --visible)                   VISIBLE=1; shift ;;
     *)
       if [[ "$1" =~ ^[0-9]+$ ]]; then
         USER_MAX_ITERATIONS="$1"
@@ -102,8 +115,10 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-if [[ -z "$CUSTOM_TOOL" && "$TOOL" != "amp" && "$TOOL" != "claude" ]]; then
-  echo "Error: Invalid tool '$TOOL'. Must be 'amp' or 'claude'." >&2
+# ── Config missing check ─────────────────────────────────────────────
+
+if [ -z "$CUSTOM_TOOL" ] && [ -z "$TOOL_COMMAND" ]; then
+  echo "Error: No tool configuration found. Run 'hermes-coding init' to select a tool." >&2
   exit 1
 fi
 
@@ -183,11 +198,10 @@ for i in $(seq 1 "$MAX_ITERATIONS"); do
   echo "=== Iteration $i / $MAX_ITERATIONS ==="
   PROMPT=$(cat "$SKILL_FILE")
 
-  # Invoke AI tool
-  if [[ -n "$CUSTOM_TOOL" && "$VISIBLE" -eq 0 ]]; then
-    USER_SHELL="${SHELL:-/bin/bash}"
-    echo "$PROMPT" | "$USER_SHELL" -i -c "$CUSTOM_TOOL" 2>&1 || true
-  elif [[ -n "$CUSTOM_TOOL" && "$VISIBLE" -eq 1 && "$(uname)" == "Darwin" ]]; then
+  # ── Invoke AI tool ────────────────────────────────────────────────
+
+  if [[ "$VISIBLE" -eq 1 && "$(uname)" == "Darwin" ]]; then
+    # ── Visible mode: interactive TUI in a new Terminal.app window ──
     PROMPT_FILE=$(mktemp "/tmp/hermes-prompt-${i}-XXXXXX")
     echo "$PROMPT" > "$PROMPT_FILE"
 
@@ -195,6 +209,14 @@ for i in $(seq 1 "$MAX_ITERATIONS"); do
     rm -f "$MARKER_FILE"
 
     WRAPPER_FILE=$(mktemp "/tmp/hermes-wrapper-${i}-XXXXXX.sh")
+
+    # Use CUSTOM_TOOL if set, otherwise use TOOL_COMMAND_INTERACTIVE from config
+    if [[ -n "$CUSTOM_TOOL" ]]; then
+      VISIBLE_CMD="$CUSTOM_TOOL"
+    else
+      VISIBLE_CMD="$TOOL_COMMAND_INTERACTIVE"
+    fi
+
     cat > "$WRAPPER_FILE" <<WRAPPER
 #!/bin/bash
 echo ""
@@ -209,7 +231,7 @@ export HERMES_CODING_WORKSPACE="${PROJECT_ROOT}"
 cd "${PROJECT_ROOT}"
 
 HERMES_PROMPT=\$(cat "${PROMPT_FILE}")
-echo "\$HERMES_PROMPT" | "${SHELL:-/bin/bash}" -i -c "${CUSTOM_TOOL}" 2>&1
+echo "\$HERMES_PROMPT" | ${SHELL:-/bin/bash} -i -c "${VISIBLE_CMD}" 2>&1
 
 touch "${MARKER_FILE}"
 rm -f "${PROMPT_FILE}" "${WRAPPER_FILE}"
@@ -234,79 +256,24 @@ WRAPPER
     echo "  Iteration $i finished."
     rm -f "$MARKER_FILE"
 
-  elif [[ "$VISIBLE" -eq 1 && "$(uname)" == "Darwin" ]]; then
-    # ── Visible mode: interactive TUI in a new Terminal.app window ──
-    #
-    # Key difference from background mode:
-    #   - NO --print flag → full interactive TUI (tool calls, spinners, etc.)
-    #   - Prompt passed as positional arg (not piped via stdin)
-    #   - User watches Claude work, then closes window or types /exit when done
-    #   - Main loop waits for the window to close via marker file
-    #
-    PROMPT_FILE=$(mktemp "/tmp/hermes-prompt-${i}-XXXXXX")
-    echo "$PROMPT" > "$PROMPT_FILE"
-
-    MARKER_FILE=$(mktemp "/tmp/hermes-marker-${i}-XXXXXX")
-    rm -f "$MARKER_FILE"
-
-    WRAPPER_FILE=$(mktemp "/tmp/hermes-wrapper-${i}-XXXXXX.sh")
-    cat > "$WRAPPER_FILE" <<WRAPPER
-#!/bin/bash
-echo ""
-echo "╔══════════════════════════════════════════════════╗"
-echo "║  Hermes Phase 3 Iteration"
-echo "║  Iteration: ${i} / ${MAX_ITERATIONS}"
-echo "║  Close this window or type /exit when done"
-echo "╚══════════════════════════════════════════════════╝"
-echo ""
-
-export HERMES_CODING_WORKSPACE="${PROJECT_ROOT}"
-cd "${PROJECT_ROOT}"
-
-# Read prompt from file to avoid shell escaping issues
-HERMES_PROMPT=\$(cat "${PROMPT_FILE}")
-
-if [[ "${TOOL}" == "amp" ]]; then
-  echo "\$HERMES_PROMPT" | amp --dangerously-allow-all 2>&1
-else
-  # Interactive mode — full TUI, no --print
-  claude --dangerously-skip-permissions "\$HERMES_PROMPT"
-fi
-
-# Signal completion to the main loop
-touch "${MARKER_FILE}"
-
-# Cleanup and close
-rm -f "${PROMPT_FILE}" "${WRAPPER_FILE}"
-echo ""
-echo "Task finished. This window will close in 5 seconds..."
-sleep 5
-exit 0
-WRAPPER
-    chmod +x "$WRAPPER_FILE"
-
-    echo "  Opening visible terminal window for Phase 3 iteration $i"
-    echo "  (Watch Claude work in the new window. Close it when done.)"
-    osascript -e "tell application \"Terminal\"
-      activate
-      do script \"clear && ${WRAPPER_FILE}\"
-    end tell"
-
-    # Wait for Claude to finish (marker file created when user closes window)
-    echo "  Waiting for task to complete..."
-    while [[ ! -f "$MARKER_FILE" ]]; do
-      sleep 2
-    done
-    echo "  Iteration $i finished."
-
-    # Cleanup (marker only; wrapper cleans its own files)
-    rm -f "$MARKER_FILE"
-
-  elif [[ "$TOOL" == "amp" ]]; then
-    echo "$PROMPT" | amp --dangerously-allow-all 2>&1 || true
   else
-    echo "$PROMPT" | claude --dangerously-skip-permissions --print --verbose \
-      2>&1 || true
+    # ── Background mode: eval-based dispatch ──
+    # CUSTOM_TOOL takes priority over TOOL_COMMAND from config
+    # Pipe prompt to stdin for tools like claude --print
+    if [[ -n "$CUSTOM_TOOL" ]]; then
+      echo "$PROMPT" | eval "$CUSTOM_TOOL" 2>&1 || true
+    else
+      echo "$PROMPT" | eval "$TOOL_COMMAND" 2>&1 || true
+    fi
+  fi
+
+  # ── Check for tool-not-found errors ───────────────────────────────
+  if [ $? -ne 0 ]; then
+    TOOL_BIN=$(echo "${CUSTOM_TOOL:-$TOOL_COMMAND}" | cut -d' ' -f1)
+    if ! command -v "$TOOL_BIN" &> /dev/null; then
+      echo "Error: Tool not installed: $TOOL_BIN" >&2
+      echo "Install it first, or run 'hermes-coding init' to switch tools." >&2
+    fi
   fi
 
   NEXT_JSON=$(hermes-coding tasks next --json 2>/dev/null) || NEXT_JSON='{}'

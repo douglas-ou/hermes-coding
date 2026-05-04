@@ -4,6 +4,7 @@ import * as fs from 'fs-extra';
 import * as path from 'path';
 import * as childProcess from 'child_process';
 import { registerLoopCommand } from '../../src/commands/loop';
+import * as configService from '../../src/services/config-service';
 
 vi.mock('child_process', () => ({
   spawnSync: vi.fn(),
@@ -36,6 +37,25 @@ describe('loop command', () => {
     vi.clearAllMocks();
     fs.removeSync(testDir);
   });
+
+  function seedImplementState(): void {
+    fs.writeJSONSync(stateFile, {
+      phase: 'implement',
+      startedAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    });
+  }
+
+  function mockSpawnSuccess(): void {
+    spawnSyncMock.mockReturnValue({
+      pid: 123,
+      output: [],
+      stdout: null,
+      stderr: null,
+      status: 0,
+      signal: null,
+    } as any);
+  }
 
   it('registers the loop command', () => {
     registerLoopCommand(program, testDir);
@@ -70,28 +90,26 @@ describe('loop command', () => {
     expect(processExitSpy).toHaveBeenCalledWith(7);
   });
 
-  it('launches the bundled loop script during implement', async () => {
-    fs.writeJSONSync(stateFile, {
-      phase: 'implement',
-      startedAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
+  it('reads from config.json and passes tool-command to script', async () => {
+    seedImplementState();
+    configService.writeConfig(testDir, {
+      tool: 'codex',
+      toolCommand: 'codex exec --sandbox danger-full-access --ask-for-approval never',
+      toolCommandInteractive: 'codex',
     });
-
-    spawnSyncMock.mockReturnValue({
-      pid: 123,
-      output: [],
-      stdout: null,
-      stderr: null,
-      status: 0,
-      signal: null,
-    } as any);
+    mockSpawnSuccess();
 
     registerLoopCommand(program, testDir);
     await program.parseAsync(['node', 'test', 'loop']);
 
     expect(spawnSyncMock).toHaveBeenCalledWith(
       '/bin/bash',
-      [expect.stringContaining(path.join('cli', 'scripts', 'ralph-loop.sh')), '--tool', 'claude'],
+      expect.arrayContaining([
+        expect.stringContaining('ralph-loop.sh'),
+        '--tool', 'codex',
+        '--tool-command', 'codex exec --sandbox danger-full-access --ask-for-approval never',
+        '--tool-command-interactive', 'codex',
+      ]),
       expect.objectContaining({
         cwd: testDir,
         stdio: 'inherit',
@@ -104,63 +122,103 @@ describe('loop command', () => {
     expect(processExitSpy).toHaveBeenCalledWith(0);
   });
 
-  it('passes --visible and max-iterations to the loop script', async () => {
-    fs.writeJSONSync(stateFile, {
-      phase: 'implement',
-      startedAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
+  it('--tool claude overrides config.json', async () => {
+    seedImplementState();
+    configService.writeConfig(testDir, {
+      tool: 'codex',
+      toolCommand: 'codex exec --sandbox danger-full-access --ask-for-approval never',
+      toolCommandInteractive: 'codex',
     });
-
-    spawnSyncMock.mockReturnValue({
-      pid: 123,
-      output: [],
-      stdout: null,
-      stderr: null,
-      status: 0,
-      signal: null,
-    } as any);
+    mockSpawnSuccess();
 
     registerLoopCommand(program, testDir);
-    await program.parseAsync(['node', 'test', 'loop', '--visible', '--tool', 'amp', '10']);
+    await program.parseAsync(['node', 'test', 'loop', '--tool', 'claude']);
 
     expect(spawnSyncMock).toHaveBeenCalledWith(
       '/bin/bash',
-      [expect.stringContaining('ralph-loop.sh'), '--tool', 'amp', '--visible', '10'],
+      expect.arrayContaining([
+        '--tool', 'claude',
+        '--tool-command', 'claude --dangerously-skip-permissions --print --verbose',
+        '--tool-command-interactive', 'claude --dangerously-skip-permissions',
+      ]),
       expect.any(Object)
     );
   });
 
-  it('passes --custom flag to the loop script', async () => {
-    fs.writeJSONSync(stateFile, {
-      phase: 'implement',
-      startedAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
+  it('--custom overrides everything', async () => {
+    seedImplementState();
+    configService.writeConfig(testDir, {
+      tool: 'claude',
+      toolCommand: 'claude --dangerously-skip-permissions --print --verbose',
+      toolCommandInteractive: 'claude --dangerously-skip-permissions',
     });
-
-    spawnSyncMock.mockReturnValue({
-      pid: 123,
-      output: [],
-      stdout: null,
-      stderr: null,
-      status: 0,
-      signal: null,
-    } as any);
+    mockSpawnSuccess();
 
     registerLoopCommand(program, testDir);
-    await program.parseAsync(['node', 'test', 'loop', '--custom', 'codex --sandbox danger-full-access --ask-for-approval never']);
+    await program.parseAsync(['node', 'test', 'loop', '--custom', 'my-custom-tool --flag']);
 
     expect(spawnSyncMock).toHaveBeenCalledWith(
       '/bin/bash',
-      expect.arrayContaining(['--custom', 'codex --sandbox danger-full-access --ask-for-approval never']),
+      expect.arrayContaining([
+        '--tool', 'custom',
+        '--tool-command', 'my-custom-tool --flag',
+        '--tool-command-interactive', 'my-custom-tool --flag',
+        '--custom', 'my-custom-tool --flag',
+      ]),
+      expect.any(Object)
+    );
+  });
+
+  it('reports error when no config.json and no --tool/--custom', async () => {
+    seedImplementState();
+    // No config.json written
+    mockSpawnSuccess();
+
+    registerLoopCommand(program, testDir);
+    await program.parseAsync(['node', 'test', 'loop']);
+
+    expect(spawnSyncMock).not.toHaveBeenCalled();
+    expect(consoleErrorSpy).toHaveBeenCalledWith(expect.stringContaining('No tool configuration'));
+    expect(processExitSpy).toHaveBeenCalledWith(2);
+  });
+
+  it('reports error for unknown --tool', async () => {
+    seedImplementState();
+    mockSpawnSuccess();
+
+    registerLoopCommand(program, testDir);
+    await program.parseAsync(['node', 'test', 'loop', '--tool', 'chatgpt']);
+
+    expect(spawnSyncMock).not.toHaveBeenCalled();
+    expect(consoleErrorSpy).toHaveBeenCalledWith(expect.stringContaining("Unknown tool 'chatgpt'"));
+    expect(processExitSpy).toHaveBeenCalledWith(2);
+  });
+
+  it('passes --visible and max-iterations to the loop script', async () => {
+    seedImplementState();
+    configService.writeConfig(testDir, {
+      tool: 'claude',
+      toolCommand: 'claude --dangerously-skip-permissions --print --verbose',
+      toolCommandInteractive: 'claude --dangerously-skip-permissions',
+    });
+    mockSpawnSuccess();
+
+    registerLoopCommand(program, testDir);
+    await program.parseAsync(['node', 'test', 'loop', '--visible', '10']);
+
+    expect(spawnSyncMock).toHaveBeenCalledWith(
+      '/bin/bash',
+      expect.arrayContaining(['--visible', '10']),
       expect.any(Object)
     );
   });
 
   it('returns the child exit code when the loop script stops with an error', async () => {
-    fs.writeJSONSync(stateFile, {
-      phase: 'implement',
-      startedAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
+    seedImplementState();
+    configService.writeConfig(testDir, {
+      tool: 'claude',
+      toolCommand: 'claude --dangerously-skip-permissions --print --verbose',
+      toolCommandInteractive: 'claude --dangerously-skip-permissions',
     });
 
     spawnSyncMock.mockReturnValue({

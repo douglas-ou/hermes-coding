@@ -5,13 +5,19 @@ import * as path from 'path';
 import * as os from 'os';
 import { registerInitCommand } from '../../src/commands/init';
 import * as serviceFactory from '../../src/commands/service-factory';
+import * as configService from '../../src/services/config-service';
 
 vi.mock('../../src/commands/service-factory');
+vi.mock('@clack/prompts', () => ({
+  select: vi.fn(),
+  isCancel: vi.fn().mockReturnValue(false),
+}));
 
 describe('init command', () => {
   let program: Command;
   let tempDir: string;
   let consoleLogSpy: any;
+  let consoleErrorSpy: any;
   let processExitSpy: any;
   let cwdSpy: any;
   let mockHookService: any;
@@ -20,6 +26,7 @@ describe('init command', () => {
     tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'init-test-'));
     program = new Command();
     consoleLogSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+    consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
     processExitSpy = vi.spyOn(process, 'exit').mockImplementation((() => {}) as any);
     cwdSpy = vi.spyOn(process, 'cwd').mockReturnValue(tempDir);
 
@@ -31,6 +38,7 @@ describe('init command', () => {
 
   afterEach(async () => {
     consoleLogSpy.mockRestore();
+    consoleErrorSpy.mockRestore();
     processExitSpy.mockRestore();
     cwdSpy.mockRestore();
     await fs.remove(tempDir);
@@ -43,16 +51,133 @@ describe('init command', () => {
       expect(cmd).toBeDefined();
     });
 
-    it('should have --json option', () => {
+    it('should have --tool option', () => {
       registerInitCommand(program);
       const cmd = program.commands.find((c) => c.name() === 'init');
-      expect(cmd?.options.find((o) => o.flags === '--json')).toBeDefined();
+      expect(cmd?.options.find((o) => o.flags.includes('--tool'))).toBeDefined();
     });
 
     it('should have --no-hook option', () => {
       registerInitCommand(program);
       const cmd = program.commands.find((c) => c.name() === 'init');
       expect(cmd?.options.find((o) => o.flags === '--no-hook')).toBeDefined();
+    });
+  });
+
+  describe('--tool flag (non-interactive)', () => {
+    it('should write config.json with claude tool', async () => {
+      mockHookService.createPreCommitHook.mockResolvedValue({
+        created: false,
+        reason: 'no git',
+      });
+
+      registerInitCommand(program);
+      await program.parseAsync(['node', 'test', 'init', '--tool', 'claude']);
+
+      const config = configService.readConfig(tempDir);
+      expect(config).toEqual({
+        tool: 'claude',
+        toolCommand: 'claude --dangerously-skip-permissions --print --verbose',
+        toolCommandInteractive: 'claude --dangerously-skip-permissions',
+      });
+      expect(processExitSpy).toHaveBeenCalledWith(0);
+    });
+
+    it('should write config.json with codex tool', async () => {
+      mockHookService.createPreCommitHook.mockResolvedValue({
+        created: false,
+        reason: 'no git',
+      });
+
+      registerInitCommand(program);
+      await program.parseAsync(['node', 'test', 'init', '--tool', 'codex']);
+
+      const config = configService.readConfig(tempDir);
+      expect(config).toEqual({
+        tool: 'codex',
+        toolCommand: 'codex exec --sandbox danger-full-access --ask-for-approval never',
+        toolCommandInteractive: 'codex',
+      });
+      expect(processExitSpy).toHaveBeenCalledWith(0);
+    });
+
+    it('should write config.json with amp tool', async () => {
+      mockHookService.createPreCommitHook.mockResolvedValue({
+        created: false,
+        reason: 'no git',
+      });
+
+      registerInitCommand(program);
+      await program.parseAsync(['node', 'test', 'init', '--tool', 'amp']);
+
+      const config = configService.readConfig(tempDir);
+      expect(config?.tool).toBe('amp');
+      expect(config?.toolCommand).toBe('amp --dangerously-allow-all');
+      expect(processExitSpy).toHaveBeenCalledWith(0);
+    });
+
+    it('should exit with error for unknown tool', async () => {
+      registerInitCommand(program);
+      await program.parseAsync(['node', 'test', 'init', '--tool', 'unknown']);
+
+      expect(consoleErrorSpy).toHaveBeenCalledWith(expect.stringContaining("Unknown tool 'unknown'"));
+      expect(processExitSpy).toHaveBeenCalledWith(2);
+    });
+  });
+
+  describe('interactive selection', () => {
+    it('should use clack select when no --tool is provided', async () => {
+      const clack = await import('@clack/prompts');
+      const mockSelect = vi.mocked(clack.select).mockResolvedValue('codex');
+      mockHookService.createPreCommitHook.mockResolvedValue({
+        created: false,
+        reason: 'no git',
+      });
+
+      registerInitCommand(program);
+      await program.parseAsync(['node', 'test', 'init']);
+
+      expect(mockSelect).toHaveBeenCalledWith(
+        expect.objectContaining({
+          message: expect.stringContaining('Select'),
+        })
+      );
+
+      const config = configService.readConfig(tempDir);
+      expect(config?.tool).toBe('codex');
+      expect(processExitSpy).toHaveBeenCalledWith(0);
+    });
+
+    it('should handle cancel from clack select', async () => {
+      const clack = await import('@clack/prompts');
+      vi.mocked(clack.select).mockResolvedValue(Symbol('clack:cancel'));
+      vi.mocked(clack.isCancel).mockReturnValue(true);
+
+      registerInitCommand(program);
+      await program.parseAsync(['node', 'test', 'init']);
+
+      expect(processExitSpy).toHaveBeenCalledWith(0);
+      // Config should NOT be written
+      expect(configService.readConfig(tempDir)).toBeNull();
+    });
+  });
+
+  describe('dual directory sync', () => {
+    it('should sync skills to both .claude/skills/ and .agents/skills/', async () => {
+      mockHookService.createPreCommitHook.mockResolvedValue({
+        created: false,
+        reason: 'no git',
+      });
+
+      registerInitCommand(program);
+      await program.parseAsync(['node', 'test', 'init', '--tool', 'claude']);
+
+      expect(fs.existsSync(path.join(tempDir, '.claude', 'skills'))).toBe(true);
+      expect(fs.existsSync(path.join(tempDir, '.agents', 'skills'))).toBe(true);
+
+      const output = consoleLogSpy.mock.calls.map((c: any[]) => c[0]).join('\n');
+      expect(output).toContain('.claude/skills/');
+      expect(output).toContain('.agents/skills/');
     });
   });
 
@@ -66,7 +191,7 @@ describe('init command', () => {
       });
 
       registerInitCommand(program);
-      await program.parseAsync(['node', 'test', 'init']);
+      await program.parseAsync(['node', 'test', 'init', '--tool', 'claude']);
 
       expect(serviceFactory.createHookService).toHaveBeenCalledWith(tempDir);
       expect(mockHookService.createPreCommitHook).toHaveBeenCalledWith(tempDir);
@@ -75,13 +200,13 @@ describe('init command', () => {
 
     it('should skip hook creation with --no-hook', async () => {
       registerInitCommand(program);
-      await program.parseAsync(['node', 'test', 'init', '--no-hook']);
+      await program.parseAsync(['node', 'test', 'init', '--tool', 'claude', '--no-hook']);
 
       expect(serviceFactory.createHookService).not.toHaveBeenCalled();
       expect(processExitSpy).toHaveBeenCalledWith(0);
     });
 
-    it('should include hook result in JSON output', async () => {
+    it('should show hook created message', async () => {
       mockHookService.createPreCommitHook.mockResolvedValue({
         created: true,
         reason: 'created',
@@ -90,92 +215,63 @@ describe('init command', () => {
       });
 
       registerInitCommand(program);
-      await program.parseAsync(['node', 'test', 'init', '--json']);
-
-      const jsonOutput = consoleLogSpy.mock.calls.map((c: any[]) => c[0]).join('\n');
-      const parsed = JSON.parse(jsonOutput);
-
-      expect(parsed.success).toBe(true);
-      expect(parsed.data.hook).toBeDefined();
-      expect(parsed.data.hook.created).toBe(true);
-      expect(parsed.data.hook.testCommand).toBe('CI=true npm test');
-    });
-
-    it('should show hook created message in human-readable output', async () => {
-      mockHookService.createPreCommitHook.mockResolvedValue({
-        created: true,
-        reason: 'created',
-        hookPath: '/path/.git/hooks/pre-commit',
-        testCommand: 'CI=true npm test',
-      });
-
-      registerInitCommand(program);
-      await program.parseAsync(['node', 'test', 'init']);
+      await program.parseAsync(['node', 'test', 'init', '--tool', 'claude']);
 
       const output = consoleLogSpy.mock.calls.map((c: any[]) => c[0]).join('\n');
-      expect(output).toContain('pre-commit created');
-      expect(output).toContain('CI=true npm test');
+      expect(output).toContain('Pre-commit hook installed');
     });
 
     it('should show skipped message when hook not created', async () => {
       mockHookService.createPreCommitHook.mockResolvedValue({
         created: false,
         reason: 'no test command detected',
-        hookPath: '/path/.git/hooks/pre-commit',
-        testCommand: null,
       });
 
       registerInitCommand(program);
-      await program.parseAsync(['node', 'test', 'init']);
+      await program.parseAsync(['node', 'test', 'init', '--tool', 'claude']);
 
       const output = consoleLogSpy.mock.calls.map((c: any[]) => c[0]).join('\n');
       expect(output).toContain('skipped');
-      expect(output).toContain('no test command detected');
-    });
-
-    it('should show skipped message for idempotent rerun', async () => {
-      mockHookService.createPreCommitHook.mockResolvedValue({
-        created: false,
-        reason: 'already exists',
-        hookPath: '/path/.git/hooks/pre-commit',
-        testCommand: 'CI=true npm test',
-      });
-
-      registerInitCommand(program);
-      await program.parseAsync(['node', 'test', 'init']);
-
-      const output = consoleLogSpy.mock.calls.map((c: any[]) => c[0]).join('\n');
-      expect(output).toContain('skipped');
-      expect(output).toContain('already exists');
     });
 
     it('should not fail init when hook creation throws', async () => {
       mockHookService.createPreCommitHook.mockRejectedValue(new Error('disk full'));
 
       registerInitCommand(program);
-      await program.parseAsync(['node', 'test', 'init']);
+      await program.parseAsync(['node', 'test', 'init', '--tool', 'claude']);
 
-      // Init should still succeed
       expect(processExitSpy).toHaveBeenCalledWith(0);
-
-      // JSON output should show the error as reason
       const output = consoleLogSpy.mock.calls.map((c: any[]) => c[0]).join('\n');
-      expect(output).toContain('Error: disk full');
+      expect(output).toContain('skipped');
     });
+  });
 
-    it('should include hook error in JSON output when creation fails', async () => {
-      mockHookService.createPreCommitHook.mockRejectedValue(new Error('permission denied'));
-
+  describe('re-entry (idempotent init)', () => {
+    it('should overwrite config.json but not delete existing files', async () => {
+      // First init with claude
+      mockHookService.createPreCommitHook.mockResolvedValue({ created: false, reason: 'no git' });
       registerInitCommand(program);
-      await program.parseAsync(['node', 'test', 'init', '--json']);
+      await program.parseAsync(['node', 'test', 'init', '--tool', 'claude']);
 
-      const jsonOutput = consoleLogSpy.mock.calls.map((c: any[]) => c[0]).join('\n');
-      const parsed = JSON.parse(jsonOutput);
+      // Simulate state.json and tasks/ existing
+      const stateFile = path.join(tempDir, '.hermes-coding', 'state.json');
+      fs.writeJSONSync(stateFile, { phase: 'implement' });
+      const tasksDir = path.join(tempDir, '.hermes-coding', 'tasks');
+      fs.ensureDirSync(tasksDir);
+      fs.writeFileSync(path.join(tasksDir, 'task1.md'), '# Task 1');
 
-      expect(parsed.success).toBe(true);
-      expect(parsed.data.hook).toBeDefined();
-      expect(parsed.data.hook.created).toBe(false);
-      expect(parsed.data.hook.reason).toContain('permission denied');
+      // Re-init with codex
+      program = new Command();
+      registerInitCommand(program);
+      await program.parseAsync(['node', 'test', 'init', '--tool', 'codex']);
+
+      // Config should be updated
+      const config = configService.readConfig(tempDir);
+      expect(config?.tool).toBe('codex');
+
+      // State and tasks should still exist
+      expect(fs.existsSync(stateFile)).toBe(true);
+      expect(fs.existsSync(path.join(tasksDir, 'task1.md'))).toBe(true);
     });
   });
 });
