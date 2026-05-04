@@ -31,6 +31,15 @@ if [ "$CURRENT_PHASE" != "implement" ]; then
 fi
 
 hermes-coding status --json
+
+# Detect whether .hermes-coding/ metadata is tracked in git
+HERMES_TRACKED=0
+if [ -d .hermes-coding ]; then
+  if ! git check-ignore -q .hermes-coding/state.json 2>/dev/null; then
+    HERMES_TRACKED=1
+  fi
+fi
+echo "Hermes metadata tracked in git: $HERMES_TRACKED"
 ```
 
 Show a short progress summary from `hermes-coding status --json` before doing
@@ -212,7 +221,12 @@ Commit all changes from this task. The git commit hook is responsible for full
 regression testing.
 
 ```bash
-git add -A
+if [ "$HERMES_TRACKED" -eq 1 ]; then
+  # Stage code only, exclude hermes metadata for separate commit
+  git add -A -- . ':!.hermes-coding'
+else
+  git add -A
+fi
 if git diff --cached --quiet; then
   echo "No code changes to commit for task $TASK_ID."
 else
@@ -249,7 +263,7 @@ Parameters:
   run_in_background: false
 ```
 
-Then retry `git add -A && git commit`.
+Then retry the staging (same `HERMES_TRACKED` conditional) and commit.
 
 ---
 
@@ -291,6 +305,22 @@ If the verifier reports **VERIFIED**:
 
 ```bash
 hermes-coding tasks complete "$TASK_ID"
+```
+
+If hermes metadata is tracked in git, commit the state changes separately:
+
+```bash
+if [ "$HERMES_TRACKED" -eq 1 ]; then
+  git add .hermes-coding/
+  if git diff --cached --quiet; then
+    echo "No metadata changes to commit for task $TASK_ID."
+  else
+    git commit --no-verify -m "chore(hermes): update state after completing task ${TASK_ID}
+
+hermes-coding workflow state: task completion"
+    echo "Committed hermes metadata for task $TASK_ID."
+  fi
+fi
 ```
 
 Then spawn a progress promoter to carry learnings into the project progress file:
