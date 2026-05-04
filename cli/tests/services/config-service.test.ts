@@ -33,7 +33,7 @@ describe('config-service', () => {
     it('should return correct HermesConfig when file exists', () => {
       const config: HermesConfig = {
         tool: 'codex',
-        toolCommand: 'codex exec --sandbox danger-full-access --ask-for-approval never',
+        toolCommand: 'codex --yolo exec',
         toolCommandInteractive: 'codex',
       };
       writeConfig(tempDir, config);
@@ -96,7 +96,7 @@ describe('config-service', () => {
 
       const config2: HermesConfig = {
         tool: 'codex',
-        toolCommand: 'codex exec --sandbox danger-full-access --ask-for-approval never',
+        toolCommand: 'codex --yolo exec',
         toolCommandInteractive: 'codex',
       };
       writeConfig(tempDir, config2);
@@ -126,7 +126,7 @@ describe('config-service', () => {
     it('should return command pair for codex', () => {
       const result = resolveToolCommand('codex');
       expect(result).toEqual({
-        command: 'codex exec --sandbox danger-full-access --ask-for-approval never',
+        command: 'codex --yolo exec',
         interactive: 'codex',
       });
     });

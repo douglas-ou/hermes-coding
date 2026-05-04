@@ -94,7 +94,7 @@ describe('loop command', () => {
     seedImplementState();
     configService.writeConfig(testDir, {
       tool: 'codex',
-      toolCommand: 'codex exec --sandbox danger-full-access --ask-for-approval never',
+      toolCommand: 'codex --yolo exec',
       toolCommandInteractive: 'codex',
     });
     mockSpawnSuccess();
@@ -107,7 +107,7 @@ describe('loop command', () => {
       expect.arrayContaining([
         expect.stringContaining('ralph-loop.sh'),
         '--tool', 'codex',
-        '--tool-command', 'codex exec --sandbox danger-full-access --ask-for-approval never',
+        '--tool-command', 'codex --yolo exec',
         '--tool-command-interactive', 'codex',
       ]),
       expect.objectContaining({
@@ -126,7 +126,7 @@ describe('loop command', () => {
     seedImplementState();
     configService.writeConfig(testDir, {
       tool: 'codex',
-      toolCommand: 'codex exec --sandbox danger-full-access --ask-for-approval never',
+      toolCommand: 'codex --yolo exec',
       toolCommandInteractive: 'codex',
     });
     mockSpawnSuccess();

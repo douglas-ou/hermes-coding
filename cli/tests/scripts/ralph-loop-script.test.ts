@@ -295,7 +295,7 @@ describe('ralph-loop.sh', () => {
 
     const result = runLoopScript(workspaceDir, binDir, [
       '--tool', 'codex',
-      '--tool-command', 'codex exec --sandbox danger-full-access --ask-for-approval never',
+      '--tool-command', 'codex --yolo exec',
       '--tool-command-interactive', 'codex',
       '5',
     ]);

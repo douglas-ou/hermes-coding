@@ -95,7 +95,7 @@ describe('init command', () => {
       const config = configService.readConfig(tempDir);
       expect(config).toEqual({
         tool: 'codex',
-        toolCommand: 'codex exec --sandbox danger-full-access --ask-for-approval never',
+        toolCommand: 'codex --yolo exec',
         toolCommandInteractive: 'codex',
       });
       expect(processExitSpy).toHaveBeenCalledWith(0);

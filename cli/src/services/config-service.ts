@@ -24,7 +24,7 @@ export const TOOL_COMMAND_MAP: Record<string, { command: string; interactive: st
     interactive: 'amp --dangerously-allow-all',
   },
   codex: {
-    command: 'codex exec --sandbox danger-full-access --ask-for-approval never',
+    command: 'codex --yolo exec',
     interactive: 'codex',
   },
 };
