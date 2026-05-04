@@ -257,23 +257,31 @@ WRAPPER
     rm -f "$MARKER_FILE"
 
   else
-    # ── Background mode: eval-based dispatch ──
-    # Use interactive shell (-i) so user aliases (e.g. cc-d-glm) are resolved.
+    # ── Background mode ──
+    # Use interactive shell (-i) so user aliases resolve.
     # CUSTOM_TOOL takes priority over TOOL_COMMAND from config.
     USER_SHELL="${SHELL:-/bin/bash}"
+    TOOL_EXIT=0
     if [[ -n "$CUSTOM_TOOL" ]]; then
-      echo "$PROMPT" | "$USER_SHELL" -ic "$CUSTOM_TOOL" 2>&1 || true
+      echo "$PROMPT" | "$USER_SHELL" -ic "$CUSTOM_TOOL" 2>&1 || TOOL_EXIT=$?
     else
-      echo "$PROMPT" | "$USER_SHELL" -ic "$TOOL_COMMAND" 2>&1 || true
+      echo "$PROMPT" | "$USER_SHELL" -ic "$TOOL_COMMAND" 2>&1 || TOOL_EXIT=$?
     fi
-  fi
 
-  # ── Check for tool-not-found errors ───────────────────────────────
-  if [ $? -ne 0 ]; then
-    TOOL_BIN=$(echo "${CUSTOM_TOOL:-$TOOL_COMMAND}" | cut -d' ' -f1)
-    if ! command -v "$TOOL_BIN" &> /dev/null; then
-      echo "Error: Tool not installed: $TOOL_BIN" >&2
-      echo "Install it first, or run 'hermes-coding init' to switch tools." >&2
+    # Handle Ctrl+C (exit code 130 = SIGINT)
+    if [[ "$TOOL_EXIT" -eq 130 ]]; then
+      echo "" >&2
+      echo "Loop interrupted by user (Ctrl+C)." >&2
+      exit 130
+    fi
+
+    # Check for tool-not-found errors
+    if [[ "$TOOL_EXIT" -ne 0 ]]; then
+      TOOL_BIN=$(echo "${CUSTOM_TOOL:-$TOOL_COMMAND}" | cut -d' ' -f1)
+      if ! command -v "$TOOL_BIN" &> /dev/null; then
+        echo "Error: Tool not installed: $TOOL_BIN" >&2
+        echo "Install it first, or run 'hermes-coding init' to switch tools." >&2
+      fi
     fi
   fi
 

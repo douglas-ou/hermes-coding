@@ -221,14 +221,24 @@ exit 0
 }
 
 function runLoopScript(workspaceDir: string, binDir: string, extraArgs: string[] = []) {
+  // Set HOME to workspaceDir with minimal shell rc files so the
+  // interactive shell (-i) used by ralph-loop.sh doesn't load the
+  // real user's rc and clobber PATH (which has our fake binaries).
+  const effectivePath = `${binDir}:${process.env.PATH || ''}`;
+  fs.ensureDirSync(workspaceDir);
+  fs.writeFileSync(path.join(workspaceDir, '.zshrc'), `export PATH="${effectivePath}"\n`);
+  fs.writeFileSync(path.join(workspaceDir, '.bashrc'), `export PATH="${effectivePath}"\n`);
+  fs.writeFileSync(path.join(workspaceDir, '.bash_profile'), `source "${workspaceDir}/.bashrc"\n`);
+
   return spawnSync('/bin/bash', [loopScriptPath, ...extraArgs], {
     cwd: workspaceDir,
     encoding: 'utf-8',
     env: {
       ...process.env,
       NO_UPDATE_NOTIFIER: '1',
-      PATH: `${binDir}:${process.env.PATH || ''}`,
+      PATH: effectivePath,
       HERMES_CODING_WORKSPACE: workspaceDir,
+      HOME: workspaceDir,
     },
   });
 }
