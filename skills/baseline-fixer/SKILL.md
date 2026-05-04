@@ -1,6 +1,6 @@
 ---
 name: baseline-fixer
-description: Auto-fix failing baseline tests before Phase 3 task execution. Detects test command, runs tests, classifies failures, then fixes one issue at a time with one commit per fix, looping until all tests pass. Used internally by hermes-coding Phase 3.
+description: 'Auto-fix failing baseline tests before Phase 3 task execution. Detects test command, runs tests, classifies failures, then fixes one issue at a time with one commit per fix, looping until all tests pass. Used internally by hermes-coding Phase 3.'
 argument-hint: ""
 allowed-tools: [Task, Read, Write, Bash, Grep, Glob]
 user-invocable: true
