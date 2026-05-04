@@ -50,6 +50,19 @@ export function writeConfig(workspaceDir: string, config: HermesConfig): void {
 }
 
 /**
+ * Maps each tool to its expected agent instruction file (project root)
+ * and the command to generate it. Tools without a known file are excluded.
+ */
+export const TOOL_INSTRUCTION_FILE_MAP: Record<
+  string,
+  { fileName: string; initCommand: string }
+> = {
+  claude: { fileName: 'CLAUDE.md', initCommand: 'claude init' },
+  codex: { fileName: 'AGENTS.md', initCommand: 'codex init' },
+  amp: { fileName: 'AGENTS.md', initCommand: 'amp init' },
+};
+
+/**
  * Look up a tool's command pair from the TOOL_COMMAND_MAP.
  * Returns undefined for unknown tools.
  */

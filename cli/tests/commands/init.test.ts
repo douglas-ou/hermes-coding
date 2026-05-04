@@ -272,4 +272,81 @@ describe('init command', () => {
       expect(fs.existsSync(path.join(tasksDir, 'task1.md'))).toBe(true);
     });
   });
+
+  describe('agent instruction file detection', () => {
+    it('should warn when CLAUDE.md is missing for claude tool', async () => {
+      mockHookService.createPreCommitHook.mockResolvedValue({
+        created: false,
+        reason: 'no git',
+      });
+
+      registerInitCommand(program);
+      await program.parseAsync(['node', 'test', 'init', '--tool', 'claude']);
+
+      const output = consoleLogSpy.mock.calls.map((c: any[]) => c[0]).join('\n');
+      expect(output).toContain('No CLAUDE.md found');
+      expect(output).toContain('claude init');
+      expect(processExitSpy).toHaveBeenCalledWith(0);
+    });
+
+    it('should not warn when CLAUDE.md exists for claude tool', async () => {
+      fs.writeFileSync(path.join(tempDir, 'CLAUDE.md'), '# Project instructions');
+      mockHookService.createPreCommitHook.mockResolvedValue({
+        created: false,
+        reason: 'no git',
+      });
+
+      registerInitCommand(program);
+      await program.parseAsync(['node', 'test', 'init', '--tool', 'claude']);
+
+      const output = consoleLogSpy.mock.calls.map((c: any[]) => c[0]).join('\n');
+      expect(output).not.toContain('No CLAUDE.md found');
+      expect(processExitSpy).toHaveBeenCalledWith(0);
+    });
+
+    it('should warn when AGENTS.md is missing for codex tool', async () => {
+      mockHookService.createPreCommitHook.mockResolvedValue({
+        created: false,
+        reason: 'no git',
+      });
+
+      registerInitCommand(program);
+      await program.parseAsync(['node', 'test', 'init', '--tool', 'codex']);
+
+      const output = consoleLogSpy.mock.calls.map((c: any[]) => c[0]).join('\n');
+      expect(output).toContain('No AGENTS.md found');
+      expect(output).toContain('codex init');
+      expect(processExitSpy).toHaveBeenCalledWith(0);
+    });
+
+    it('should not warn when AGENTS.md exists for codex tool', async () => {
+      fs.writeFileSync(path.join(tempDir, 'AGENTS.md'), '# Agent instructions');
+      mockHookService.createPreCommitHook.mockResolvedValue({
+        created: false,
+        reason: 'no git',
+      });
+
+      registerInitCommand(program);
+      await program.parseAsync(['node', 'test', 'init', '--tool', 'codex']);
+
+      const output = consoleLogSpy.mock.calls.map((c: any[]) => c[0]).join('\n');
+      expect(output).not.toContain('No AGENTS.md found');
+      expect(processExitSpy).toHaveBeenCalledWith(0);
+    });
+
+    it('should warn when AGENTS.md is missing for amp tool', async () => {
+      mockHookService.createPreCommitHook.mockResolvedValue({
+        created: false,
+        reason: 'no git',
+      });
+
+      registerInitCommand(program);
+      await program.parseAsync(['node', 'test', 'init', '--tool', 'amp']);
+
+      const output = consoleLogSpy.mock.calls.map((c: any[]) => c[0]).join('\n');
+      expect(output).toContain('No AGENTS.md found');
+      expect(output).toContain('amp init');
+      expect(processExitSpy).toHaveBeenCalledWith(0);
+    });
+  });
 });

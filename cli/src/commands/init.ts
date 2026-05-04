@@ -9,11 +9,13 @@
 import { Command } from 'commander';
 import chalk from 'chalk';
 import * as clack from '@clack/prompts';
+import * as fs from 'fs-extra';
+import * as path from 'path';
 import { ExitCode } from '../core/exit-codes';
 import { handleError, Errors } from '../core/error-handler';
 import { createHookService } from './service-factory';
 import { syncSkills } from '../services/skill-sync.service';
-import { writeConfig, resolveToolCommand, HermesConfig } from '../services/config-service';
+import { writeConfig, resolveToolCommand, HermesConfig, TOOL_INSTRUCTION_FILE_MAP } from '../services/config-service';
 
 const TOOL_OPTIONS = [
   { value: 'claude', label: 'Claude Code', hint: 'CLI by Anthropic' },
@@ -88,21 +90,31 @@ export function registerInitCommand(program: Command): void {
           }
         }
 
-        // ── 5. Output ──────────────────────────────────────────────────
-        console.log(chalk.green(`\n✓ Workspace initialized (.hermes-coding/)`));
+        // ── 5. Check for agent instruction file ──────────────────────
+        const instructionInfo = TOOL_INSTRUCTION_FILE_MAP[tool];
+        const instructionFileMissing = instructionInfo
+          && !fs.existsSync(path.join(process.cwd(), instructionInfo.fileName));
+
+        // ── 6. Output ──────────────────────────────────────────────────
+        console.log(chalk.dim(`\n✓ Workspace initialized (.hermes-coding/)`));
         console.log(chalk.dim(`  Tool:   ${tool}`));
-        console.log(chalk.green(`✓ Config saved (.hermes-coding/config.json)`));
+        console.log(chalk.dim(`✓ Config saved (.hermes-coding/config.json)`));
 
         for (const [name, files] of Object.entries(skills)) {
           const label = name === 'hermes-coding' ? `Skills synced to .claude/skills/${name}/` : `  ${name}/`;
-          console.log(chalk.green(`✓ Skills synced to .claude/skills/${name}/`));
+          console.log(chalk.dim(`✓ Skills synced to .claude/skills/${name}/`));
         }
-        console.log(chalk.green(`✓ Skills synced to .agents/skills/hermes-coding/`));
+        console.log(chalk.dim(`✓ Skills synced to .agents/skills/hermes-coding/`));
 
         if (hookCreated) {
-          console.log(chalk.green(`✓ Pre-commit hook installed`));
+          console.log(chalk.dim(`✓ Pre-commit hook installed`));
         } else if (hookSkipped) {
           console.log(chalk.dim(`  Hook: skipped (${hookReason})`));
+        }
+
+        if (instructionFileMissing) {
+          console.log(chalk.yellow.bold(`\n⚠ No ${instructionInfo.fileName} found in project root.`));
+          console.log(chalk.dim(`  Run \`${instructionInfo.initCommand}\` to generate one.`));
         }
 
         console.log();
