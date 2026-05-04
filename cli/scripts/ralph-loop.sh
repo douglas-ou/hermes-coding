@@ -258,12 +258,13 @@ WRAPPER
 
   else
     # ── Background mode: eval-based dispatch ──
-    # CUSTOM_TOOL takes priority over TOOL_COMMAND from config
-    # Pipe prompt to stdin for tools like claude --print
+    # Use interactive shell (-i) so user aliases (e.g. cc-d-glm) are resolved.
+    # CUSTOM_TOOL takes priority over TOOL_COMMAND from config.
+    USER_SHELL="${SHELL:-/bin/bash}"
     if [[ -n "$CUSTOM_TOOL" ]]; then
-      echo "$PROMPT" | eval "$CUSTOM_TOOL" 2>&1 || true
+      echo "$PROMPT" | "$USER_SHELL" -ic "$CUSTOM_TOOL" 2>&1 || true
     else
-      echo "$PROMPT" | eval "$TOOL_COMMAND" 2>&1 || true
+      echo "$PROMPT" | "$USER_SHELL" -ic "$TOOL_COMMAND" 2>&1 || true
     fi
   fi
 
