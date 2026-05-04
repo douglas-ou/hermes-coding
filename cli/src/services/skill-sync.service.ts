@@ -90,7 +90,37 @@ function copyToTarget(skillsRoot: string, targetDir: string): {
 }
 
 /**
+ * Rewrite `.claude/skills/` path references to `.agents/skills/`
+ * in all text files under the given directory.
+ */
+function rewriteClaudePathsToAgents(agentsSkillsDir: string): void {
+  const textFileExts = new Set(['.md', '.sh', '.txt', '.yaml', '.yml', '.json']);
+
+  function walk(dir: string): void {
+    for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+      if (entry.name.startsWith('.')) continue;
+      const fullPath = path.join(dir, entry.name);
+      if (entry.isDirectory()) {
+        walk(fullPath);
+      } else if (entry.isFile() && textFileExts.has(path.extname(fullPath))) {
+        const content = fs.readFileSync(fullPath, 'utf-8');
+        if (content.includes('.claude/skills/')) {
+          const updated = content.replace(/\.claude\/skills\//g, '.agents/skills/');
+          fs.writeFileSync(fullPath, updated, 'utf-8');
+        }
+      }
+    }
+  }
+
+  walk(agentsSkillsDir);
+}
+
+/**
  * Copy bundled skills to both .claude/skills/ and .agents/skills/.
+ *
+ * The .agents/ copy has all `.claude/skills/` references rewritten
+ * to `.agents/skills/` so that agent tools (Codex, Amp) resolve
+ * paths correctly when reading their own skill files.
  *
  * @param workspaceDir - Project root where directories will be created
  * @returns SkillSyncResult with both targets and copied skill info
@@ -100,11 +130,12 @@ export function syncSkills(workspaceDir: string): SkillSyncResult {
   const targetSkillsDir = path.join(workspaceDir, '.claude', 'skills');
   const agentsSkillsDir = path.join(workspaceDir, '.agents', 'skills');
 
-  // Copy to .claude/skills/
+  // Copy to .claude/skills/ (unchanged)
   const { skills, totalFiles } = copyToTarget(skillsRoot, targetSkillsDir);
 
-  // Copy identical content to .agents/skills/
+  // Copy to .agents/skills/ and rewrite internal path references
   copyToTarget(skillsRoot, agentsSkillsDir);
+  rewriteClaudePathsToAgents(agentsSkillsDir);
 
   return {
     target: targetSkillsDir,
