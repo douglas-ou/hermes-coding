@@ -18,13 +18,12 @@ export function registerLoopCommand(program: Command, workspaceDir: string): voi
     .description('Run the Phase 3 implement loop from the current terminal')
     .option('--tool <tool>', 'Override tool from config (claude, amp, codex)')
     .option('--custom <command>', 'Custom tool command (overrides everything)')
-    .option('--visible', 'Open a visible terminal window per iteration')
     .argument('[max-iterations]', 'Maximum number of iterations')
     .addHelpText(
       'after',
       '\nRun this after /hermes-coding or /hermes-coding resume has advanced the workflow to implement.'
     )
-    .action(async (maxIterations: string | undefined, options: { tool?: string; visible: boolean; custom?: string }) => {
+    .action(async (maxIterations: string | undefined, options: { tool?: string; custom?: string }) => {
       try {
         const stateService = createStateService(workspaceDir);
         const state = await stateService.getState();
@@ -59,13 +58,11 @@ export function registerLoopCommand(program: Command, workspaceDir: string): voi
 
         // ── Resolve tool commands: --custom > --tool > config.json ──
         let toolCommand: string;
-        let toolCommandInteractive: string;
         let toolLabel: string;
 
         if (options.custom) {
           // Highest priority: explicit custom command
           toolCommand = options.custom;
-          toolCommandInteractive = options.custom;
           toolLabel = 'custom';
         } else if (options.tool) {
           // Second: --tool flag → lookup from TOOL_COMMAND_MAP
@@ -76,7 +73,6 @@ export function registerLoopCommand(program: Command, workspaceDir: string): voi
             return;
           }
           toolCommand = resolved.command;
-          toolCommandInteractive = resolved.interactive;
           toolLabel = options.tool;
         } else {
           // Third: read from config.json
@@ -88,7 +84,6 @@ export function registerLoopCommand(program: Command, workspaceDir: string): voi
             return;
           }
           toolCommand = config.toolCommand;
-          toolCommandInteractive = config.toolCommandInteractive;
           toolLabel = config.tool;
         }
 
@@ -97,10 +92,8 @@ export function registerLoopCommand(program: Command, workspaceDir: string): voi
           loopScriptPath,
           '--tool', toolLabel,
           '--tool-command', toolCommand,
-          '--tool-command-interactive', toolCommandInteractive,
         ];
         if (options.custom) scriptArgs.push('--custom', options.custom);
-        if (options.visible) scriptArgs.push('--visible');
         if (maxIterations) scriptArgs.push(maxIterations);
 
         const result = spawnSync('/bin/bash', scriptArgs, {

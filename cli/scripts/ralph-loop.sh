@@ -8,10 +8,8 @@
 #
 # Options:
 #   --tool <name>                        Tool name for logging (claude/amp/codex)
-#   --tool-command <cmd>                 Full command for background mode
-#   --tool-command-interactive <cmd>     Full command for interactive/visible mode
+#   --tool-command <cmd>                 Full command for tool invocation
 #   --custom <cmd>                       Custom command (highest priority)
-#   --visible                            Open visible terminal per iteration
 #
 # Env:
 #   HERMES_CODING_WORKSPACE   Project root (default: $PWD)
@@ -90,9 +88,7 @@ trap 'exit 143' TERM
 
 TOOL="claude"
 TOOL_COMMAND=""
-TOOL_COMMAND_INTERACTIVE=""
 USER_MAX_ITERATIONS=""
-VISIBLE=0
 CUSTOM_TOOL=""
 
 while [[ $# -gt 0 ]]; do
@@ -101,11 +97,8 @@ while [[ $# -gt 0 ]]; do
     --tool=*)                    TOOL="${1#*=}"; shift ;;
     --tool-command)              TOOL_COMMAND="$2"; shift 2 ;;
     --tool-command=*)            TOOL_COMMAND="${1#*=}"; shift ;;
-    --tool-command-interactive)  TOOL_COMMAND_INTERACTIVE="$2"; shift 2 ;;
-    --tool-command-interactive=*) TOOL_COMMAND_INTERACTIVE="${1#*=}"; shift ;;
     --custom)                    CUSTOM_TOOL="$2"; shift 2 ;;
     --custom=*)                  CUSTOM_TOOL="${1#*=}"; shift ;;
-    --visible)                   VISIBLE=1; shift ;;
     *)
       if [[ "$1" =~ ^[0-9]+$ ]]; then
         USER_MAX_ITERATIONS="$1"
@@ -184,7 +177,7 @@ if [[ "$PHASE" != "implement" ]]; then
   exit 1
 fi
 
-echo "hermes-coding loop — project: $PROJECT_ROOT — tool: ${CUSTOM_TOOL:-$TOOL} — max: $MAX_ITERATIONS — visible: $VISIBLE"
+echo "hermes-coding loop — project: $PROJECT_ROOT — tool: ${CUSTOM_TOOL:-$TOOL} — max: $MAX_ITERATIONS"
 
 # ── Main loop ────────────────────────────────────────────────────────
 
@@ -200,88 +193,29 @@ for i in $(seq 1 "$MAX_ITERATIONS"); do
 
   # ── Invoke AI tool ────────────────────────────────────────────────
 
-  if [[ "$VISIBLE" -eq 1 && "$(uname)" == "Darwin" ]]; then
-    # ── Visible mode: interactive TUI in a new Terminal.app window ──
-    PROMPT_FILE=$(mktemp "/tmp/hermes-prompt-${i}-XXXXXX")
-    echo "$PROMPT" > "$PROMPT_FILE"
-
-    MARKER_FILE=$(mktemp "/tmp/hermes-marker-${i}-XXXXXX")
-    rm -f "$MARKER_FILE"
-
-    WRAPPER_FILE=$(mktemp "/tmp/hermes-wrapper-${i}-XXXXXX.sh")
-
-    # Use CUSTOM_TOOL if set, otherwise use TOOL_COMMAND_INTERACTIVE from config
-    if [[ -n "$CUSTOM_TOOL" ]]; then
-      VISIBLE_CMD="$CUSTOM_TOOL"
-    else
-      VISIBLE_CMD="$TOOL_COMMAND_INTERACTIVE"
-    fi
-
-    cat > "$WRAPPER_FILE" <<WRAPPER
-#!/bin/bash
-echo ""
-echo "╔══════════════════════════════════════════════════╗"
-echo "║  Hermes Phase 3 Iteration"
-echo "║  Iteration: ${i} / ${MAX_ITERATIONS}"
-echo "║  Close this window or type /exit when done"
-echo "╚══════════════════════════════════════════════════╝"
-echo ""
-
-export HERMES_CODING_WORKSPACE="${PROJECT_ROOT}"
-cd "${PROJECT_ROOT}"
-
-HERMES_PROMPT=\$(cat "${PROMPT_FILE}")
-echo "\$HERMES_PROMPT" | ${SHELL:-/bin/bash} -i -c "${VISIBLE_CMD}" 2>&1
-
-touch "${MARKER_FILE}"
-rm -f "${PROMPT_FILE}" "${WRAPPER_FILE}"
-echo ""
-echo "Task finished. This window will close in 5 seconds..."
-sleep 5
-exit 0
-WRAPPER
-    chmod +x "$WRAPPER_FILE"
-
-    echo "  Opening visible terminal window for Phase 3 iteration $i"
-    echo "  (Watch the tool work in the new window. Close it when done.)"
-    osascript -e "tell application \"Terminal\"
-      activate
-      do script \"clear && ${WRAPPER_FILE}\"
-    end tell"
-
-    echo "  Waiting for task to complete..."
-    while [[ ! -f "$MARKER_FILE" ]]; do
-      sleep 2
-    done
-    echo "  Iteration $i finished."
-    rm -f "$MARKER_FILE"
-
+  # Use interactive shell (-i) so user aliases resolve.
+  # CUSTOM_TOOL takes priority over TOOL_COMMAND from config.
+  USER_SHELL="${SHELL:-/bin/bash}"
+  TOOL_EXIT=0
+  if [[ -n "$CUSTOM_TOOL" ]]; then
+    echo "$PROMPT" | "$USER_SHELL" -ic "$CUSTOM_TOOL" 2>&1 || TOOL_EXIT=$?
   else
-    # ── Background mode ──
-    # Use interactive shell (-i) so user aliases resolve.
-    # CUSTOM_TOOL takes priority over TOOL_COMMAND from config.
-    USER_SHELL="${SHELL:-/bin/bash}"
-    TOOL_EXIT=0
-    if [[ -n "$CUSTOM_TOOL" ]]; then
-      echo "$PROMPT" | "$USER_SHELL" -ic "$CUSTOM_TOOL" 2>&1 || TOOL_EXIT=$?
-    else
-      echo "$PROMPT" | "$USER_SHELL" -ic "$TOOL_COMMAND" 2>&1 || TOOL_EXIT=$?
-    fi
+    echo "$PROMPT" | "$USER_SHELL" -ic "$TOOL_COMMAND" 2>&1 || TOOL_EXIT=$?
+  fi
 
-    # Handle Ctrl+C (exit code 130 = SIGINT)
-    if [[ "$TOOL_EXIT" -eq 130 ]]; then
-      echo "" >&2
-      echo "Loop interrupted by user (Ctrl+C)." >&2
-      exit 130
-    fi
+  # Handle Ctrl+C (exit code 130 = SIGINT)
+  if [[ "$TOOL_EXIT" -eq 130 ]]; then
+    echo "" >&2
+    echo "Loop interrupted by user (Ctrl+C)." >&2
+    exit 130
+  fi
 
-    # Check for tool-not-found errors
-    if [[ "$TOOL_EXIT" -ne 0 ]]; then
-      TOOL_BIN=$(echo "${CUSTOM_TOOL:-$TOOL_COMMAND}" | cut -d' ' -f1)
-      if ! command -v "$TOOL_BIN" &> /dev/null; then
-        echo "Error: Tool not installed: $TOOL_BIN" >&2
-        echo "Install it first, or run 'hermes-coding init' to switch tools." >&2
-      fi
+  # Check for tool-not-found errors
+  if [[ "$TOOL_EXIT" -ne 0 ]]; then
+    TOOL_BIN=$(echo "${CUSTOM_TOOL:-$TOOL_COMMAND}" | cut -d' ' -f1)
+    if ! command -v "$TOOL_BIN" &> /dev/null; then
+      echo "Error: Tool not installed: $TOOL_BIN" >&2
+      echo "Install it first, or run 'hermes-coding init' to switch tools." >&2
     fi
   fi
 

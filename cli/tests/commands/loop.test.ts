@@ -95,7 +95,6 @@ describe('loop command', () => {
     configService.writeConfig(testDir, {
       tool: 'codex',
       toolCommand: 'codex --yolo exec',
-      toolCommandInteractive: 'codex',
     });
     mockSpawnSuccess();
 
@@ -108,7 +107,6 @@ describe('loop command', () => {
         expect.stringContaining('ralph-loop.sh'),
         '--tool', 'codex',
         '--tool-command', 'codex --yolo exec',
-        '--tool-command-interactive', 'codex',
       ]),
       expect.objectContaining({
         cwd: testDir,
@@ -127,7 +125,6 @@ describe('loop command', () => {
     configService.writeConfig(testDir, {
       tool: 'codex',
       toolCommand: 'codex --yolo exec',
-      toolCommandInteractive: 'codex',
     });
     mockSpawnSuccess();
 
@@ -139,7 +136,6 @@ describe('loop command', () => {
       expect.arrayContaining([
         '--tool', 'claude',
         '--tool-command', 'claude --dangerously-skip-permissions --print --verbose',
-        '--tool-command-interactive', 'claude --dangerously-skip-permissions',
       ]),
       expect.any(Object)
     );
@@ -150,7 +146,6 @@ describe('loop command', () => {
     configService.writeConfig(testDir, {
       tool: 'claude',
       toolCommand: 'claude --dangerously-skip-permissions --print --verbose',
-      toolCommandInteractive: 'claude --dangerously-skip-permissions',
     });
     mockSpawnSuccess();
 
@@ -162,7 +157,6 @@ describe('loop command', () => {
       expect.arrayContaining([
         '--tool', 'custom',
         '--tool-command', 'my-custom-tool --flag',
-        '--tool-command-interactive', 'my-custom-tool --flag',
         '--custom', 'my-custom-tool --flag',
       ]),
       expect.any(Object)
@@ -194,31 +188,11 @@ describe('loop command', () => {
     expect(processExitSpy).toHaveBeenCalledWith(2);
   });
 
-  it('passes --visible and max-iterations to the loop script', async () => {
-    seedImplementState();
-    configService.writeConfig(testDir, {
-      tool: 'claude',
-      toolCommand: 'claude --dangerously-skip-permissions --print --verbose',
-      toolCommandInteractive: 'claude --dangerously-skip-permissions',
-    });
-    mockSpawnSuccess();
-
-    registerLoopCommand(program, testDir);
-    await program.parseAsync(['node', 'test', 'loop', '--visible', '10']);
-
-    expect(spawnSyncMock).toHaveBeenCalledWith(
-      '/bin/bash',
-      expect.arrayContaining(['--visible', '10']),
-      expect.any(Object)
-    );
-  });
-
   it('returns the child exit code when the loop script stops with an error', async () => {
     seedImplementState();
     configService.writeConfig(testDir, {
       tool: 'claude',
       toolCommand: 'claude --dangerously-skip-permissions --print --verbose',
-      toolCommandInteractive: 'claude --dangerously-skip-permissions',
     });
 
     spawnSyncMock.mockReturnValue({

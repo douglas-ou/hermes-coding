@@ -64,7 +64,6 @@ export function registerInitCommand(program: Command): void {
         const config: HermesConfig = {
           tool,
           toolCommand: commands.command,
-          toolCommandInteractive: commands.interactive,
         };
         writeConfig(process.cwd(), config);
 

@@ -34,7 +34,6 @@ describe('config-service', () => {
       const config: HermesConfig = {
         tool: 'codex',
         toolCommand: 'codex --yolo exec',
-        toolCommandInteractive: 'codex',
       };
       writeConfig(tempDir, config);
 
@@ -46,7 +45,6 @@ describe('config-service', () => {
       const config: HermesConfig = {
         tool: 'claude',
         toolCommand: 'claude --dangerously-skip-permissions --print --verbose',
-        toolCommandInteractive: 'claude --dangerously-skip-permissions',
       };
       writeConfig(tempDir, config);
 
@@ -60,7 +58,6 @@ describe('config-service', () => {
       const config: HermesConfig = {
         tool: 'amp',
         toolCommand: 'amp --dangerously-allow-all',
-        toolCommandInteractive: 'amp --dangerously-allow-all',
       };
 
       writeConfig(tempDir, config);
@@ -76,7 +73,6 @@ describe('config-service', () => {
       const config: HermesConfig = {
         tool: 'claude',
         toolCommand: 'claude --dangerously-skip-permissions --print --verbose',
-        toolCommandInteractive: 'claude --dangerously-skip-permissions',
       };
 
       expect(fs.existsSync(path.join(tempDir, '.hermes-coding'))).toBe(false);
@@ -90,14 +86,12 @@ describe('config-service', () => {
       const config1: HermesConfig = {
         tool: 'claude',
         toolCommand: 'claude --dangerously-skip-permissions --print --verbose',
-        toolCommandInteractive: 'claude --dangerously-skip-permissions',
       };
       writeConfig(tempDir, config1);
 
       const config2: HermesConfig = {
         tool: 'codex',
         toolCommand: 'codex --yolo exec',
-        toolCommandInteractive: 'codex',
       };
       writeConfig(tempDir, config2);
 
@@ -107,27 +101,24 @@ describe('config-service', () => {
   });
 
   describe('resolveToolCommand', () => {
-    it('should return command pair for claude', () => {
+    it('should return command for claude', () => {
       const result = resolveToolCommand('claude');
       expect(result).toEqual({
         command: 'claude --dangerously-skip-permissions --print --verbose',
-        interactive: 'claude --dangerously-skip-permissions',
       });
     });
 
-    it('should return command pair for amp', () => {
+    it('should return command for amp', () => {
       const result = resolveToolCommand('amp');
       expect(result).toEqual({
         command: 'amp --dangerously-allow-all',
-        interactive: 'amp --dangerously-allow-all',
       });
     });
 
-    it('should return command pair for codex', () => {
+    it('should return command for codex', () => {
       const result = resolveToolCommand('codex');
       expect(result).toEqual({
         command: 'codex --yolo exec',
-        interactive: 'codex',
       });
     });
 
@@ -142,12 +133,10 @@ describe('config-service', () => {
       expect(Object.keys(TOOL_COMMAND_MAP)).toEqual(['claude', 'amp', 'codex']);
     });
 
-    it('should have command and interactive for each tool', () => {
+    it('should have command for each tool', () => {
       for (const [tool, entry] of Object.entries(TOOL_COMMAND_MAP)) {
         expect(entry.command).toBeTruthy();
-        expect(entry.interactive).toBeTruthy();
         expect(typeof entry.command).toBe('string');
-        expect(typeof entry.interactive).toBe('string');
       }
     });
   });

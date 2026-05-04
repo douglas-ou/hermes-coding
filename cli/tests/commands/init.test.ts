@@ -78,7 +78,6 @@ describe('init command', () => {
       expect(config).toEqual({
         tool: 'claude',
         toolCommand: 'claude --dangerously-skip-permissions --print --verbose',
-        toolCommandInteractive: 'claude --dangerously-skip-permissions',
       });
       expect(processExitSpy).toHaveBeenCalledWith(0);
     });
@@ -96,7 +95,6 @@ describe('init command', () => {
       expect(config).toEqual({
         tool: 'codex',
         toolCommand: 'codex --yolo exec',
-        toolCommandInteractive: 'codex',
       });
       expect(processExitSpy).toHaveBeenCalledWith(0);
     });

@@ -272,7 +272,6 @@ describe('ralph-loop.sh', () => {
     const result = runLoopScript(workspaceDir, binDir, [
       '--tool', 'claude',
       '--tool-command', 'claude --dangerously-skip-permissions --print --verbose',
-      '--tool-command-interactive', 'claude --dangerously-skip-permissions',
       '5',
     ]);
     const output = `${result.stdout}${result.stderr}`;
@@ -296,7 +295,6 @@ describe('ralph-loop.sh', () => {
     const result = runLoopScript(workspaceDir, binDir, [
       '--tool', 'codex',
       '--tool-command', 'codex --yolo exec',
-      '--tool-command-interactive', 'codex',
       '5',
     ]);
     const callLog = readCallLog(workspaceDir);
@@ -317,7 +315,6 @@ describe('ralph-loop.sh', () => {
     const result = runLoopScript(workspaceDir, binDir, [
       '--tool', 'claude',
       '--tool-command', 'claude --dangerously-skip-permissions --print --verbose',
-      '--tool-command-interactive', 'claude --dangerously-skip-permissions',
       '5',
     ]);
     const output = `${result.stdout}${result.stderr}`;
@@ -334,7 +331,6 @@ describe('ralph-loop.sh', () => {
     const result = runLoopScript(workspaceDir, binDir, [
       '--tool', 'claude',
       '--tool-command', 'claude --dangerously-skip-permissions --print --verbose',
-      '--tool-command-interactive', 'claude --dangerously-skip-permissions',
       '5',
     ]);
     const output = `${result.stdout}${result.stderr}`;
@@ -355,7 +351,6 @@ describe('ralph-loop.sh', () => {
     const result = runLoopScript(workspaceDir, binDir, [
       '--tool', 'claude',
       '--tool-command', 'claude --dangerously-skip-permissions --print --verbose',
-      '--tool-command-interactive', 'claude --dangerously-skip-permissions',
       '--custom', 'claude',
       '5',
     ]);
@@ -390,7 +385,6 @@ describe('ralph-loop.sh', () => {
     runLoopScript(workspaceDir, binDir, [
       '--tool', 'claude',
       '--tool-command', 'claude --dangerously-skip-permissions --print --verbose',
-      '--tool-command-interactive', 'claude --dangerously-skip-permissions',
       '5',
     ]);
 
@@ -407,7 +401,6 @@ describe('ralph-loop.sh', () => {
     runLoopScript(workspaceDir, binDir, [
       '--tool', 'claude',
       '--tool-command', 'claude --dangerously-skip-permissions --print --verbose',
-      '--tool-command-interactive', 'claude --dangerously-skip-permissions',
       '5',
     ]);
 
@@ -423,7 +416,6 @@ describe('ralph-loop.sh', () => {
     runLoopScript(workspaceDir, binDir, [
       '--tool', 'claude',
       '--tool-command', 'claude --dangerously-skip-permissions --print --verbose',
-      '--tool-command-interactive', 'claude --dangerously-skip-permissions',
       '5',
     ]);
 
@@ -444,7 +436,6 @@ describe('ralph-loop.sh', () => {
     const result = runLoopScript(workspaceDir, binDir, [
       '--tool', 'claude',
       '--tool-command', 'claude --dangerously-skip-permissions --print --verbose',
-      '--tool-command-interactive', 'claude --dangerously-skip-permissions',
       '5',
     ]);
     const output = `${result.stdout}${result.stderr}`;
@@ -472,7 +463,6 @@ describe('ralph-loop.sh', () => {
     const result = runLoopScript(workspaceDir, binDir, [
       '--tool', 'claude',
       '--tool-command', 'claude --dangerously-skip-permissions --print --verbose',
-      '--tool-command-interactive', 'claude --dangerously-skip-permissions',
       '5',
     ]);
     const output = `${result.stdout}${result.stderr}`;
@@ -499,7 +489,6 @@ describe('ralph-loop.sh', () => {
     const result = runLoopScript(workspaceDir, binDir, [
       '--tool', 'claude',
       '--tool-command', 'claude --dangerously-skip-permissions --print --verbose',
-      '--tool-command-interactive', 'claude --dangerously-skip-permissions',
       '5',
     ]);
 

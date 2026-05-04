@@ -11,21 +11,17 @@ import * as fs from 'fs-extra';
 export interface HermesConfig {
   tool: string;
   toolCommand: string;
-  toolCommandInteractive: string;
 }
 
-export const TOOL_COMMAND_MAP: Record<string, { command: string; interactive: string }> = {
+export const TOOL_COMMAND_MAP: Record<string, { command: string }> = {
   claude: {
     command: 'claude --dangerously-skip-permissions --print --verbose',
-    interactive: 'claude --dangerously-skip-permissions',
   },
   amp: {
     command: 'amp --dangerously-allow-all',
-    interactive: 'amp --dangerously-allow-all',
   },
   codex: {
     command: 'codex --yolo exec',
-    interactive: 'codex',
   },
 };
 
@@ -59,6 +55,6 @@ export function writeConfig(workspaceDir: string, config: HermesConfig): void {
  */
 export function resolveToolCommand(
   tool: string,
-): { command: string; interactive: string } | undefined {
+): { command: string } | undefined {
   return TOOL_COMMAND_MAP[tool];
 }
