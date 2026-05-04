@@ -273,6 +273,69 @@ describe('init command', () => {
     });
   });
 
+  describe('.gitignore update', () => {
+    it('should create .gitignore with .loop.lock entry when no .gitignore exists', async () => {
+      mockHookService.createPreCommitHook.mockResolvedValue({
+        created: false,
+        reason: 'no git',
+      });
+
+      registerInitCommand(program);
+      await program.parseAsync(['node', 'test', 'init', '--tool', 'claude']);
+
+      const gitignorePath = path.join(tempDir, '.gitignore');
+      expect(fs.existsSync(gitignorePath)).toBe(true);
+      const content = fs.readFileSync(gitignorePath, 'utf8');
+      expect(content).toContain('.hermes-coding/.loop.lock');
+    });
+
+    it('should append to existing .gitignore', async () => {
+      fs.writeFileSync(path.join(tempDir, '.gitignore'), 'node_modules/\n');
+      mockHookService.createPreCommitHook.mockResolvedValue({
+        created: false,
+        reason: 'no git',
+      });
+
+      registerInitCommand(program);
+      await program.parseAsync(['node', 'test', 'init', '--tool', 'claude']);
+
+      const gitignorePath = path.join(tempDir, '.gitignore');
+      const content = fs.readFileSync(gitignorePath, 'utf8');
+      expect(content).toContain('node_modules/');
+      expect(content).toContain('.hermes-coding/.loop.lock');
+    });
+
+    it('should not duplicate entry if already present', async () => {
+      fs.writeFileSync(path.join(tempDir, '.gitignore'), '.hermes-coding/.loop.lock\n');
+      mockHookService.createPreCommitHook.mockResolvedValue({
+        created: false,
+        reason: 'no git',
+      });
+
+      registerInitCommand(program);
+      await program.parseAsync(['node', 'test', 'init', '--tool', 'claude']);
+
+      const gitignorePath = path.join(tempDir, '.gitignore');
+      const content = fs.readFileSync(gitignorePath, 'utf8');
+      const matches = content.match(/\.hermes-coding\/\.loop\.lock/g);
+      expect(matches?.length).toBe(1);
+    });
+
+    it('should not fail init when .gitignore write fails', async () => {
+      // Make .gitignore a directory to cause write failure
+      fs.mkdirSync(path.join(tempDir, '.gitignore'));
+      mockHookService.createPreCommitHook.mockResolvedValue({
+        created: false,
+        reason: 'no git',
+      });
+
+      registerInitCommand(program);
+      await program.parseAsync(['node', 'test', 'init', '--tool', 'claude']);
+
+      expect(processExitSpy).toHaveBeenCalledWith(0);
+    });
+  });
+
   describe('agent instruction file detection', () => {
     it('should warn when CLAUDE.md is missing for claude tool', async () => {
       mockHookService.createPreCommitHook.mockResolvedValue({

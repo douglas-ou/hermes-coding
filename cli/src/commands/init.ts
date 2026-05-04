@@ -69,10 +69,23 @@ export function registerInitCommand(program: Command): void {
         };
         writeConfig(process.cwd(), config);
 
-        // ── 3. Sync skills ─────────────────────────────────────────────
+        // ── 3. Add .loop.lock to .gitignore (best-effort) ─────────────
+        let gitignoreUpdated = false;
+        try {
+          const gitignorePath = path.join(process.cwd(), '.gitignore');
+          const entry = '.hermes-coding/.loop.lock';
+          const existing = fs.existsSync(gitignorePath) ? fs.readFileSync(gitignorePath, 'utf8') : '';
+          if (!existing.split('\n').some(line => line.trim() === entry)) {
+            const prefix = existing.length > 0 && !existing.endsWith('\n') ? '\n' : '';
+            fs.appendFileSync(gitignorePath, `${prefix}${entry}\n`);
+            gitignoreUpdated = true;
+          }
+        } catch { /* best-effort */ }
+
+        // ── 4. Sync skills ─────────────────────────────────────────────
         const { target, agentsTarget, skills } = syncSkills(process.cwd());
 
-        // ── 4. Pre-commit hook (best-effort) ───────────────────────────
+        // ── 5. Pre-commit hook (best-effort) ───────────────────────────
         let hookCreated = false;
         let hookSkipped = false;
         let hookReason = '';
@@ -90,12 +103,12 @@ export function registerInitCommand(program: Command): void {
           }
         }
 
-        // ── 5. Check for agent instruction file ──────────────────────
+        // ── 6. Check for agent instruction file ──────────────────────
         const instructionInfo = TOOL_INSTRUCTION_FILE_MAP[tool];
         const instructionFileMissing = instructionInfo
           && !fs.existsSync(path.join(process.cwd(), instructionInfo.fileName));
 
-        // ── 6. Output ──────────────────────────────────────────────────
+        // ── 7. Output ──────────────────────────────────────────────────
         console.log(chalk.dim(`\n✓ Workspace initialized (.hermes-coding/)`));
         console.log(chalk.dim(`  Tool:   ${tool}`));
         console.log(chalk.dim(`✓ Config saved (.hermes-coding/config.json)`));
@@ -105,6 +118,10 @@ export function registerInitCommand(program: Command): void {
           console.log(chalk.dim(`✓ Skills synced to .claude/skills/${name}/`));
         }
         console.log(chalk.dim(`✓ Skills synced to .agents/skills/hermes-coding/`));
+
+        if (gitignoreUpdated) {
+          console.log(chalk.dim(`✓ .gitignore updated (added .hermes-coding/.loop.lock)`));
+        }
 
         if (hookCreated) {
           console.log(chalk.dim(`✓ Pre-commit hook installed`));
