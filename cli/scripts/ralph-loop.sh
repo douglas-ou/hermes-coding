@@ -139,20 +139,36 @@ CLI_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 REPO_ROOT="$(dirname "$CLI_DIR")"
 
 resolve_skill_file() {
-  local workspace_skill="${PROJECT_ROOT}/.claude/skills/hermes-coding/phase-3-implement.md"
-  local bundled_skill="${CLI_DIR}/plugin-assets/skills/hermes-coding/phase-3-implement.md"
-  local source_skill="${REPO_ROOT}/skills/hermes-coding/phase-3-implement.md"
+  # For Codex/Amp, prefer .agents/skills/ (has spawn_agent syntax)
+  local skills_dir="claude"
+  case "$TOOL" in
+    codex|amp) skills_dir="agents" ;;
+  esac
 
+  local workspace_skill="${PROJECT_ROOT}/.${skills_dir}/skills/hermes-coding/phase-3-implement.md"
   if [[ -f "$workspace_skill" ]]; then
     echo "$workspace_skill"
     return 0
   fi
 
+  # Fallback: try the other skills directory
+  local alt_dir="agents"
+  [[ "$skills_dir" == "agents" ]] && alt_dir="claude"
+  local alt_skill="${PROJECT_ROOT}/.${alt_dir}/skills/hermes-coding/phase-3-implement.md"
+  if [[ -f "$alt_skill" ]]; then
+    echo "$alt_skill"
+    return 0
+  fi
+
+  # Bundled npm package fallback
+  local bundled_skill="${CLI_DIR}/plugin-assets/skills/hermes-coding/phase-3-implement.md"
   if [[ -f "$bundled_skill" ]]; then
     echo "$bundled_skill"
     return 0
   fi
 
+  # Source repo fallback
+  local source_skill="${REPO_ROOT}/skills/hermes-coding/phase-3-implement.md"
   if [[ -f "$source_skill" ]]; then
     echo "$source_skill"
     return 0
