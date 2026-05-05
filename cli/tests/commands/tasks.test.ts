@@ -586,6 +586,7 @@ status: completed
       expect(parsed.data.prompt).toContain('# Role');
       expect(parsed.data.prompt).toContain('auth.login');
       expect(parsed.data.prompt).toContain('# PRD Context');
+      expect(parsed.data.prompt).toContain('.hermes-coding/prd.md');
     });
 
     it('should still render when progress and PRD files are missing', async () => {

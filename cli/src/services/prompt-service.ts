@@ -7,14 +7,12 @@ export interface PromptInput {
   context: TaskContext;
   projectProgress: string | null;
   taskProgress: string | null;
-  prdContent: string | null;
+  prdPath: string | null;
 }
 
 export interface IPromptService {
   renderImplementerPrompt(input: PromptInput): string;
 }
-
-const PRD_LIMIT = 10000;
 
 export class PromptService implements IPromptService {
   renderImplementerPrompt(input: PromptInput): string {
@@ -22,9 +20,9 @@ export class PromptService implements IPromptService {
     const sections = [
       this.renderRole(task),
       this.renderContext(input),
+      this.renderPrd(input.prdPath),
       this.renderTaskSpec(input.taskFileContent),
       this.renderPriorLearnings(input),
-      this.renderPrd(input.prdContent),
       this.renderTddProtocol(),
       this.renderProgressWriting(task),
       this.renderCompletion(task),
@@ -113,17 +111,17 @@ export class PromptService implements IPromptService {
     return sections.join('\n');
   }
 
-  private renderPrd(prdContent: string | null): string {
-    if (!prdContent?.trim()) {
+  private renderPrd(prdPath: string | null): string {
+    if (!prdPath) {
       return ['# PRD Context', '', 'No PRD context was found.'].join('\n');
     }
 
-    const trimmed = prdContent.trimEnd();
-    const truncated = trimmed.length > PRD_LIMIT
-      ? `${trimmed.slice(0, PRD_LIMIT)}\n\n[PRD truncated at ${PRD_LIMIT} characters]`
-      : trimmed;
-
-    return ['# PRD Context', '', truncated].join('\n');
+    return [
+      '# PRD Context',
+      '',
+      `The PRD is available at \`${prdPath}\`.`,
+      'Read it when you need product requirements, user flows, or design context.',
+    ].join('\n');
   }
 
   private renderTddProtocol(): string {

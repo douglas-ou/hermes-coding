@@ -392,10 +392,14 @@ export function registerTaskCommands(program: Command, workspaceDir: string): vo
             return typeof content === 'string' ? content : content.toString('utf-8');
           };
 
-          const [projectProgress, taskProgress, prdContent] = await Promise.all([
+          const prdFilePath = path.join(workspaceDir, '.hermes-coding', 'prd.md');
+          const prdPath = await fileSystem.exists(prdFilePath)
+            ? '.hermes-coding/prd.md'
+            : null;
+
+          const [projectProgress, taskProgress] = await Promise.all([
             readOptionalFile(getProgressTxtPath(workspaceDir)),
             readOptionalFile(getTaskProgressPath(workspaceDir, task.id, task.module)),
-            readOptionalFile(path.join(workspaceDir, '.hermes-coding', 'prd.md')),
           ]);
 
           const prompt = promptService.renderImplementerPrompt({
@@ -404,7 +408,7 @@ export function registerTaskCommands(program: Command, workspaceDir: string): vo
             context,
             projectProgress,
             taskProgress,
-            prdContent,
+            prdPath,
           });
 
           if (options.json) {

@@ -57,7 +57,7 @@ status: in_progress
       context,
       projectProgress: '# Project Progress\n[2026-01-01] learned a thing',
       taskProgress: '# Task Progress: auth.login\n[2026-01-01] tried an approach',
-      prdContent: '# PRD\nAuthentication flow',
+      prdPath: '.hermes-coding/prd.md',
     });
 
     expect(prompt).toContain('# Role');
@@ -71,7 +71,7 @@ status: in_progress
     expect(prompt).toContain('## Project Progress');
     expect(prompt).toContain('## Task Progress');
     expect(prompt).toContain('# PRD Context');
-    expect(prompt).toContain('Authentication flow');
+    expect(prompt).toContain('.hermes-coding/prd.md');
     expect(prompt).toContain('# TDD Protocol');
     expect(prompt).toContain('Always run tests with `CI=true`');
     expect(prompt).toContain('# Progress Writing');
@@ -90,7 +90,7 @@ status: in_progress
       context,
       projectProgress: null,
       taskProgress: null,
-      prdContent: null,
+      prdPath: null,
     });
 
     expect(prompt).toContain('# Prior Learnings');
@@ -101,18 +101,19 @@ status: in_progress
     expect(prompt).toContain('# Constraints');
   });
 
-  it('truncates PRD content at the configured limit', () => {
-    const longPrd = `# PRD\n${'x'.repeat(10050)}`;
-
+  it('renders PRD file reference when path is provided', () => {
     const prompt = service.renderImplementerPrompt({
       task,
       taskFileContent: '# Task',
       context,
       projectProgress: null,
       taskProgress: null,
-      prdContent: longPrd,
+      prdPath: '.hermes-coding/prd.md',
     });
 
-    expect(prompt).toContain('[PRD truncated at 10000 characters]');
+    expect(prompt).toContain('# PRD Context');
+    expect(prompt).toContain('.hermes-coding/prd.md');
+    expect(prompt).toContain('Read it when you need product requirements');
+    expect(prompt).not.toContain('No PRD context was found.');
   });
 });
