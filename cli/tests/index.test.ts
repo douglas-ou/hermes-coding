@@ -134,6 +134,11 @@ describe('index.ts - CLI entry point', () => {
       checkAndNotify,
       checkForUpdates,
     }));
+    vi.doMock('@clack/prompts', () => ({
+      select: vi.fn(),
+      isCancel: vi.fn(),
+      log: { info: vi.fn(), step: vi.fn() },
+    }));
     vi.doMock('commander', async () => {
       const actual = await vi.importActual<typeof import('commander')>('commander');
       return {
@@ -161,6 +166,11 @@ describe('index.ts - CLI entry point', () => {
     vi.doMock('../src/services/update-checker.service', () => ({
       checkAndNotify,
       checkForUpdates,
+    }));
+    vi.doMock('@clack/prompts', () => ({
+      select: vi.fn(),
+      isCancel: vi.fn(),
+      log: { info: vi.fn(), step: vi.fn() },
     }));
     vi.doMock('commander', async () => {
       const actual = await vi.importActual<typeof import('commander')>('commander');

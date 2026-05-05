@@ -239,6 +239,7 @@ function runLoopScript(workspaceDir: string, binDir: string, extraArgs: string[]
       PATH: effectivePath,
       HERMES_CODING_WORKSPACE: workspaceDir,
       HOME: workspaceDir,
+      SHELL: '/bin/bash',
     },
   });
 }
