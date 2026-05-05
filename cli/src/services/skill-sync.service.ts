@@ -156,16 +156,16 @@ export function rewriteSpawnSyntaxForCodex(agentsSkillsDir: string): void {
         content = content.replace(/^\s*subagent_type: ".*"\n?/gm, '');
 
         // 3. description → task_name (2-space indent to avoid frontmatter)
-        content = content.replace(/^  description: /gm, '  task_name: ');
+        content = content.replace(/^ {2}description: /gm, '  task_name: ');
 
         // 4. Insert fork_turns: "none" after each task_name line
         content = content.replace(
-          /^(  task_name: [^\n]*)\n/gm,
+          /^( {2}task_name: [^\n]*)\n/gm,
           '$1\n  fork_turns: "none"\n'
         );
 
         // 5. prompt → message (2-space indent)
-        content = content.replace(/^  prompt: /gm, '  message: ');
+        content = content.replace(/^ {2}prompt: /gm, '  message: ');
 
         // 6. Remove run_in_background lines
         content = content.replace(/^\s*run_in_background: [^\n]*\n?/gm, '');
