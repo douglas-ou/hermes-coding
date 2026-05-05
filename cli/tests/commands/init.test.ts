@@ -412,4 +412,65 @@ describe('init command', () => {
       expect(processExitSpy).toHaveBeenCalledWith(0);
     });
   });
+
+  describe('usage guide', () => {
+    it('should show next steps with Claude Code label', async () => {
+      mockHookService.createPreCommitHook.mockResolvedValue({
+        created: false,
+        reason: 'no git',
+      });
+
+      registerInitCommand(program);
+      await program.parseAsync(['node', 'test', 'init', '--tool', 'claude']);
+
+      const output = consoleLogSpy.mock.calls.map((c: any[]) => c[0]).join('\n');
+      expect(output).toContain('Next steps');
+      expect(output).toContain('Claude Code');
+      expect(output).toContain('/hermes-coding "describe your feature"');
+    });
+
+    it('should show next steps with Amp label', async () => {
+      mockHookService.createPreCommitHook.mockResolvedValue({
+        created: false,
+        reason: 'no git',
+      });
+
+      registerInitCommand(program);
+      await program.parseAsync(['node', 'test', 'init', '--tool', 'amp']);
+
+      const output = consoleLogSpy.mock.calls.map((c: any[]) => c[0]).join('\n');
+      expect(output).toContain('Next steps');
+      expect(output).toContain('Amp');
+      expect(output).toContain('hermes-coding amp skill');
+    });
+
+    it('should show next steps with Codex label', async () => {
+      mockHookService.createPreCommitHook.mockResolvedValue({
+        created: false,
+        reason: 'no git',
+      });
+
+      registerInitCommand(program);
+      await program.parseAsync(['node', 'test', 'init', '--tool', 'codex']);
+
+      const output = consoleLogSpy.mock.calls.map((c: any[]) => c[0]).join('\n');
+      expect(output).toContain('Next steps');
+      expect(output).toContain('Codex');
+      expect(output).toContain('hermes-coding codex skill');
+    });
+
+    it('should show next steps after warning messages', async () => {
+      mockHookService.createPreCommitHook.mockResolvedValue({
+        created: false,
+        reason: 'no git',
+      });
+
+      registerInitCommand(program);
+      await program.parseAsync(['node', 'test', 'init', '--tool', 'claude']);
+
+      const output = consoleLogSpy.mock.calls.map((c: any[]) => c[0]).join('\n');
+      expect(output).toContain('No CLAUDE.md found');
+      expect(output).toContain('Next steps');
+    });
+  });
 });

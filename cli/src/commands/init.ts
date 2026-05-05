@@ -23,6 +23,28 @@ const TOOL_OPTIONS = [
   { value: 'codex', label: 'Codex', hint: 'CLI by OpenAI' },
 ];
 
+const TOOL_LABEL_MAP: Record<string, string> = {
+  claude: 'Claude Code',
+  amp: 'Amp',
+  codex: 'Codex',
+};
+
+function printNextSteps(tool: string): void {
+  const toolLabel = TOOL_LABEL_MAP[tool] || tool;
+  const command = tool === 'claude' ? '/hermes-coding "describe your feature"' : `Use the hermes-coding ${tool} skill`;
+
+  const separator = chalk.dim('─'.repeat(60));
+
+  console.log();
+  console.log(separator);
+  console.log(chalk.bold('Next steps'));
+  console.log(separator);
+  console.log(`  Open ${chalk.cyan(toolLabel)} and start a session:`);
+  console.log(`  ${chalk.dim(command)}`);
+  console.log(separator);
+  console.log();
+}
+
 export function registerInitCommand(program: Command): void {
   program
     .command('init')
@@ -134,7 +156,7 @@ export function registerInitCommand(program: Command): void {
           console.log(chalk.dim(`  Run \`${instructionInfo.initCommand}\` to generate one.`));
         }
 
-        console.log();
+        printNextSteps(tool);
 
         process.exit(ExitCode.SUCCESS);
       } catch (error) {
