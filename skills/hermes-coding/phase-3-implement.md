@@ -9,14 +9,6 @@ Perform exactly **one scheduler iteration** per invocation, then exit. The outer
 implement product code directly; it coordinates baseline checks, task selection,
 sub-agent implementation, commit-hook regression, and acceptance verification.
 
-The implementer prompt comes from:
-
-```bash
-hermes-coding tasks get "$TASK_ID" --prompt
-```
-
-That prompt is for the spawned implementer sub-agent, not for this orchestrator.
-
 ---
 
 ## Step 0: Bootstrap & Verify
@@ -150,10 +142,6 @@ conditions.
 
 ### 4.1 Spawn Implementer
 
-```bash
-IMPLEMENTER_PROMPT=$(hermes-coding tasks get "$TASK_ID" --prompt)
-```
-
 Spawn a fresh sub-agent:
 
 ```
@@ -161,18 +149,22 @@ Tool: Task
 Parameters:
   subagent_type: "general-purpose"
   description: "Implement task: {TASK_ID}"
-  prompt: "{IMPLEMENTER_PROMPT}"
+  prompt: |
+    You are the implementer agent for task {TASK_ID}.
+
+    FIRST: Fetch your full instructions by running:
+      hermes-coding tasks get {TASK_ID} --prompt
+    Follow those instructions exactly.
+
+    Key constraints (also in the fetched prompt, repeated here for safety):
+    - Write failing tests first (TDD).
+    - Implement only this task.
+    - Use CI=true for all tests.
+    - Write learnings with: hermes-coding progress append --task {TASK_ID} "..."
+    - Leave the task in_progress when done; do NOT call tasks complete yourself.
+    - Call hermes-coding tasks fail {TASK_ID} --reason "..." only if genuinely blocked.
   run_in_background: false
 ```
-
-The implementer must follow the prompt exactly:
-- Write failing tests first.
-- Implement only this task.
-- Use `CI=true` for tests.
-- Write learnings with `hermes-coding progress append --task {TASK_ID} "..."`
-- Leave the task `in_progress` when implementation is ready for parent-side commit and verification.
-- Call `hermes-coding tasks fail {TASK_ID} --reason "..."` only if the task is genuinely blocked or impossible.
-- Do not spawn sub-agents.
 
 ### 4.2 Check Sub-Agent Result
 
