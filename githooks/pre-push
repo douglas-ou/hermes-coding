@@ -1,0 +1,38 @@
+#!/usr/bin/env bash
+#
+# pre-push hook: verify lint + tests pass before pushing cli-v* tags.
+# Install: git config core.hooksPath githooks
+#
+
+set -euo pipefail
+
+# Only run for cli-v* tag pushes
+remote="$1"
+url="$2"
+
+while IFS= read -r local_ref local_hash remote_ref remote_hash; do
+  # Check if we're pushing a tag that matches cli-v*
+  if [[ "$local_ref" == refs/tags/cli-v* ]]; then
+    tag="${local_ref#refs/tags/}"
+    echo "pre-push: detected tag push $tag — running lint + tests..."
+
+    cd cli
+
+    echo "pre-push: running lint..."
+    if ! npm run lint 2>&1; then
+      echo "pre-push: lint failed. Aborting push." >&2
+      exit 1
+    fi
+
+    echo "pre-push: running tests..."
+    if ! CI=true npm test 2>&1; then
+      echo "pre-push: tests failed. Aborting push." >&2
+      exit 1
+    fi
+
+    cd ..
+    echo "pre-push: all checks passed for $tag"
+  fi
+done
+
+exit 0
