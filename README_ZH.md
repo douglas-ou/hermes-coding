@@ -195,6 +195,53 @@ npm --version    # 必须 >= 9
 
 ---
 
+## 开发
+
+### 环境搭建
+
+```bash
+# 克隆仓库
+git clone https://github.com/douglas-ou/hermes-coding.git
+cd hermes-coding
+
+# 安装 CLI 依赖
+cd cli && npm install
+
+# 启用 git hooks（推送 cli-v* 标签前自动运行 lint + 测试）
+git config core.hooksPath githooks
+```
+
+### CLI 开发
+
+```bash
+cd cli
+
+npm run build         # 编译 TypeScript → dist/
+npm run dev           # 监听模式
+
+# 测试（必须使用 CI=true 以避免交互式提示）
+CI=true npm test
+CI=true npx vitest run tests/core/task-parser.test.ts   # 单个文件
+
+npm run lint          # ESLint
+npm run format        # Prettier
+```
+
+### 发布流程
+
+1. 更新 `cli/package.json` 中的 `version`
+2. 提交：`chore: release vX.Y.Z`
+3. 创建标签并推送：
+   ```bash
+   git tag cli-vX.Y.Z
+   git push origin main cli-vX.Y.Z
+   ```
+4. `Publish CLI to npm` 工作流会自动运行 lint、测试、构建，发布到 npm，并创建 GitHub Release。
+
+pre-push hook 会在推送 `cli-v*` 标签时自动运行 lint + 测试。
+
+---
+
 ## 贡献
 
 - **Bug 报告** — [GitHub Issues](https://github.com/douglas-ou/hermes-coding/issues)

@@ -195,6 +195,53 @@ npm --version    # Must be >= 9
 
 ---
 
+## Development
+
+### Setup
+
+```bash
+# Clone the repo
+git clone https://github.com/douglas-ou/hermes-coding.git
+cd hermes-coding
+
+# Install CLI dependencies
+cd cli && npm install
+
+# Enable git hooks (runs lint + tests before pushing cli-v* tags)
+git config core.hooksPath githooks
+```
+
+### CLI development
+
+```bash
+cd cli
+
+npm run build         # Compile TypeScript → dist/
+npm run dev           # Watch mode
+
+# Testing (must use CI=true to avoid interactive prompts)
+CI=true npm test
+CI=true npx vitest run tests/core/task-parser.test.ts   # Single file
+
+npm run lint          # ESLint
+npm run format        # Prettier
+```
+
+### Releasing
+
+1. Update `version` in `cli/package.json`
+2. Commit: `chore: release vX.Y.Z`
+3. Tag and push:
+   ```bash
+   git tag cli-vX.Y.Z
+   git push origin main cli-vX.Y.Z
+   ```
+4. The `Publish CLI to npm` workflow runs lint, tests, build, publishes to npm, and creates a GitHub Release.
+
+The pre-push hook automatically runs lint + tests when pushing `cli-v*` tags.
+
+---
+
 ## Contributing
 
 - **Bug reports** — [GitHub Issues](https://github.com/douglas-ou/hermes-coding/issues)
