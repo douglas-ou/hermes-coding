@@ -1,7 +1,7 @@
 ---
 name: hermes-coding
-description: Start a structured development session from a requirement. Use when user says "build X for me", "develop a feature", "implement X end-to-end", "start a new project", or wants guided requirement-to-PR delivery. Also handles resume, status, and cancel for in-progress sessions.
-argument-hint: "<requirement>" [--mode=resume|status|cancel]
+description: 'Start a structured development session from a requirement. Use when user says "build X for me", "develop a feature", "implement X end-to-end", "start a new project", or wants guided requirement-to-PR delivery. Also handles resume, status, and cancel for in-progress sessions.'
+argument-hint: '"<requirement>" [--mode=resume|status|cancel]'
 allowed-tools: [Task, Read, Write, Bash, AskUserQuestion, Grep, Glob]
 user-invocable: true
 ---
